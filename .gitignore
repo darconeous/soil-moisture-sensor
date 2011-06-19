@@ -1,0 +1,5 @@
+/default
+*.o
+*.bak
+*.swp
+
