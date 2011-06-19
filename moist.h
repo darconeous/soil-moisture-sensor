@@ -9,7 +9,7 @@
 
 #define MOIST_DRIVE_PIN		4
 #define MOIST_COLLECTOR_PIN	3
-#define MOIST_MAX_VALUE		((1l<<(sizeof(moist_value)*8l))-1)
+#define MOIST_MAX_VALUE		(const uint8_t)((1l<<(sizeof(moist_value)*8l))-1)
 
 extern uint8_t moist_value;
 extern uint8_t moist_floor;
