@@ -34,6 +34,11 @@ moist_calc() {
 		DELAY_SOME_ARBITRARY_AMOUNT();
 	}
 
+	// Pull both lines low to avoid floating inputs
+	sbi(DDRB,MOIST_DRIVE_PIN);
+	sbi(DDRB,MOIST_COLLECTOR_PIN);
+
+
 	return v;
 }
 

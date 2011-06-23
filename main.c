@@ -1,5 +1,6 @@
 #include "moist.h"
 #include "owslave.h"
+#include <avr/io.h>
 
 #define 	ATTR_NO_INIT   __attribute__ ((section (".noinit")))
 
@@ -8,6 +9,7 @@ uint8_t moist_ceiling ATTR_NO_INIT;
 uint8_t moist_floor ATTR_NO_INIT;
 uint8_t moist_alarm_low ATTR_NO_INIT;
 uint8_t moist_alarm_high ATTR_NO_INIT;
+uint8_t moist_count ATTR_NO_INIT;
 
 void
 owslave_cb_convert() {
@@ -18,6 +20,7 @@ owslave_cb_convert() {
 
 	if(moist_value>moist_ceiling)
 		moist_ceiling = moist_value;
+	moist_count++;
 }
 
 uint8_t
@@ -37,5 +40,7 @@ owslave_cb_write_byte(uint16_t i,uint8_t value) {
 
 int
 main(void) {
+
+	// Main loop.
 	while(1) owslave_main();
 }

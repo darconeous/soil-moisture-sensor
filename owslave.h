@@ -5,7 +5,7 @@
 
 #include <stdbool.h>
 
-#define OWSLAVE_IOPIN	(1)
+#define OWSLAVE_IOPIN	(0)
 
 #define OWSLAVE_T_X		(20)
 #define OWSLAVE_T_PDH	(20) // 15-60 uSec
