@@ -15,15 +15,11 @@
 #define OWSLAVE_TYPE_DS18B20		0x28 // Temperature Sensor
 
 enum {
-	OWSLAVE_STATE_GET_ROMCMD,
-	OWSLAVE_STATE_GET_FUNCCMD,
-	OWSLAVE_STATE_WAIT_FOR_RESET,
-
-	OWSLAVE_ROMCMD_READ=0x33,
-	OWSLAVE_ROMCMD_MATCH=0x55,
-	OWSLAVE_ROMCMD_SEARCH=0xF0,
-	OWSLAVE_ROMCMD_SKIP=0xCC,
-	OWSLAVE_ROMCMD_ALARM_SEARCH=0xEC,
+	OWSLAVE_ROMCMD_READ=0x33,			// 00110011b
+	OWSLAVE_ROMCMD_MATCH=0x55,			// 01010101b
+	OWSLAVE_ROMCMD_SKIP=0xCC,			// 11001100b
+	OWSLAVE_ROMCMD_SEARCH=0xF0,			// 11110000b
+	OWSLAVE_ROMCMD_ALARM_SEARCH=0xEC,	// 11101100b
 
 	// DS2450, Quad ADC
 	OWSLAVE_FUNCCMD_RD_MEM=0xAA,
@@ -53,7 +49,12 @@ extern void owslave_main();
 // You need to define these functions:
 
 extern void owslave_cb_convert();
+extern uint8_t* owslave_cb_get_scratch_ptr();
 extern uint8_t owslave_cb_read_byte(uint16_t i);
 extern void owslave_cb_write_byte(uint16_t i,uint8_t byte);
 extern bool owslave_cb_alarm_condition();
+extern void owslave_cb_recall();
+extern void owslave_cb_commit();
+
+
 #endif
