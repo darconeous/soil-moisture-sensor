@@ -15,26 +15,10 @@ owslave_addr_t owslave_addr EEMEM = {
 
 #include <util/crc16.h>
 #define owslave_crc_update		_crc_ibutton_update
-#ifndef owslave_crc_update
-uint8_t
-owslave_crc_update(uint8_t crc,uint8_t data) {
-	uint8_t i;
-
-	crc = crc ^ data;
-	for (i = 0; i < 8; i++)
-	{
-		if (crc & 0x01)
-			crc = (crc >> 1) ^ 0x8C;
-		else
-			crc >>= 1;
-	}
-
-	return crc;
-}
-#endif
 
 //#define SAVE_POWER()		__builtin_avr_sleep()
-#define SAVE_POWER()		do{}while(0)
+#define SAVE_POWER()		__asm__ __volatile__("sleep")
+//#define SAVE_POWER()		do{}while(0)
 
 uint8_t
 owslave_read_bit() {
@@ -61,7 +45,7 @@ owslave_write_bit(uint8_t v) {
 uint8_t
 owslave_read_byte() {
 	uint8_t ret;
-	for(uint8_t i=8;i;--i) {
+	for(uint8_t i=0;i!=8;i++) {
 		ret>>=1;
 		if(owslave_read_bit())
 			sbi(ret,7);
@@ -76,7 +60,7 @@ owslave_read_word() {
 
 void
 owslave_write_byte(uint8_t byte) {
-	for(uint8_t i=8;i;--i) {
+	for(uint8_t i=0;i!=8;i++) {
 		owslave_write_bit(byte&1);
 		byte>>=1;
 	}
@@ -85,12 +69,13 @@ owslave_write_byte(uint8_t byte) {
 void
 owslave_write_bytes_with_crc(const uint8_t* bytes,uint8_t count)
 {
+	// Never call this function with a count of less than 1!
 	uint8_t crc = 0;
-	while(count--) {
+	do {
 		uint8_t byte = *bytes++;
 		owslave_write_byte(byte);
 		crc = owslave_crc_update(crc,byte);
-	}
+	} while(--count);
 	owslave_write_byte(crc);
 }
 
@@ -109,8 +94,10 @@ owslave_main() {
 	sbi(GIMSK,PCIE);
 	sei();
 	
-	// Presence Pulse
+	// Wait for reset pulse to end.
 	while(bit_is_clear(PINB,OWSLAVE_IOPIN)) SAVE_POWER();
+
+	// Send presence Pulse
 	_delay_us(OWSLAVE_T_PDH);
 	sbi(DDRB,OWSLAVE_IOPIN);
 	_delay_us(OWSLAVE_T_PDL);
@@ -137,7 +124,8 @@ owslave_main() {
 	if(flags) {
 		for(uint8_t i=0;i!=8;i++) {
 			uint8_t byte = eeprom_read_byte(&owslave_addr.d[i]);
-			for(uint8_t j=0;j<8;j++) {
+			uint8_t j = 8;
+			do {
 				if(flags&_BV(0))
 					owslave_write_bit(byte&1);
 				if(flags&_BV(1))
@@ -147,7 +135,7 @@ owslave_main() {
 						goto wait_for_reset;
 				}
 				byte>>=1;
-			}
+			} while(--j);
 		}
 	}
 
@@ -160,7 +148,7 @@ owslave_main() {
 	) {
 		owslave_cb_convert();
 	} else if(cmd==OWSLAVE_FUNCCMD_RD_SCRATCH) {
-		owslave_write_bytes_with_crc(scratch_ptr,7);
+		owslave_write_bytes_with_crc(scratch_ptr,8);
 	} else if(cmd==OWSLAVE_FUNCCMD_RD_MEM) {
 		scratch_ptr+=owslave_read_byte();
 		owslave_read_byte();
@@ -174,40 +162,9 @@ owslave_main() {
 		for(uint8_t i=3;i;--i)
 			*scratch_ptr++ = owslave_read_byte();
 	}
-/*
-	switch(cmd) {
-		case OWSLAVE_FUNCCMD_CONVERT:
-		case OWSLAVE_FUNCCMD_CONVERT_T:
-			owslave_cb_convert();
-			break;
-		case OWSLAVE_FUNCCMD_RD_SCRATCH:
-			owslave_write_bytes_with_crc(scratch_ptr,7);
-			break;
-		case OWSLAVE_FUNCCMD_RD_MEM:
-			{
-				scratch_ptr+=owslave_read_word();
-				owslave_write_bytes_with_crc(scratch_ptr,8);
-			}
-			break;
-		case OWSLAVE_FUNCCMD_RECALL_E2:
-			owslave_cb_recall();
-			break;
-		case OWSLAVE_FUNCCMD_CP_SCRATCH:
-			owslave_cb_commit();
-			break;
-		case OWSLAVE_FUNCCMD_WR_SCRATCH:
-			scratch_ptr+=2;
-			for(uint8_t i=3;i;--i)
-				*scratch_ptr++ = owslave_read_byte();
-			break;
-
-		default:
-			break;
-	}
-*/
 
 wait_for_reset:
-	while(1)
+	for(;;)
 		SAVE_POWER();
 }
 

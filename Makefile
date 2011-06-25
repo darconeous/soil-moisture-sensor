@@ -2,11 +2,12 @@
 #DEVICE=at90usb1287
 #DEVICE=atmega128rfa1
 DEVICE=attiny13a
+AVRDUDE_DEVICE=t13
 
 CC=avr-gcc -mmcu=$(DEVICE)
 OBJCOPY=avr-objcopy
 CFLAGS=-Os -DF_CPU=9600000 -std=c99
-AVRDUDE=avrdude -p t13 -y -c dragon_dw -P usb
+AVRDUDE=avrdude -p $(AVRDUDE_DEVICE) -y -c dragon_dw -P usb
 DFUPROGRAMMER=dfu-programmer
 
 # The following two lines strip out unused functions and symbols, making the executable smaller.
@@ -27,6 +28,7 @@ burn-eeprom: main.burn-eeprom
 
 %.size: %.elf
 	avr-size $<
+	md5 $<
 
 %.burn: %.hex
 	$(AVRDUDE) -U flash:w:$<
@@ -40,7 +42,7 @@ burn-eeprom: main.burn-eeprom
 %.hex-eeprom: %.elf
 	$(OBJCOPY) -O ihex -j .eeprom $< $@
 
-main.elf: owslave.o main.o moist.o
+main.elf: main.o owslave.o moist.o
 main.o: main.c moist.h owslave.h
 owslave.o: owslave.c owslave.h
 moist.o: moist.c moist.h
