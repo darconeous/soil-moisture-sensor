@@ -3,8 +3,12 @@
 #ifndef __OWSLAVE_H__
 #define __OWSLAVE_H__ 1
 
-#include <stdbool.h>
+#include <avr/eeprom.h>
+#include <stdint.h>
 
+typedef uint8_t bool;
+#define true (bool)(1)
+#define false (bool)(0)
 #define OWSLAVE_IOPIN	(0)
 
 #define OWSLAVE_T_X		(20)
@@ -42,6 +46,8 @@ typedef union {
 	} s;
 	uint8_t d[8];
 } owslave_addr_t;
+
+extern owslave_addr_t owslave_addr EEMEM;
 
 
 extern void owslave_main();

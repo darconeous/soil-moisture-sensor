@@ -7,16 +7,13 @@
 #define sbi(x,y)	x|=(1<<y)
 #define cbi(x,y)	x&=~(1<<y)
 
-owslave_addr_t owslave_addr EEMEM = {
-	.s.type = OWSLAVE_TYPE_DS18B20,
-	.s.serial = { 1,2,3,4,5,6 },
-	.s.crc = 0x9E
-};
+#if !defined(TIMSK0) && defined(TIMSK)
+#define TIMSK0 TIMSK
+#endif
 
 #include <util/crc16.h>
 #define owslave_crc_update		_crc_ibutton_update
 
-//#define SAVE_POWER()		__builtin_avr_sleep()
 #define SAVE_POWER()		__asm__ __volatile__("sleep")
 //#define SAVE_POWER()		do{}while(0)
 
@@ -168,10 +165,14 @@ wait_for_reset:
 		SAVE_POWER();
 }
 
+/*
+// This is commented out so that the vector just calls __bad_interrupt,
+// as this is a faster way to accomplish the exact same thing.
 ISR(TIM0_OVF_vect) {
 	// Timer has overflowed. Soft reset.
 	((void (*)(void))0x0000)();
 }
+*/
 
 ISR(PCINT0_vect) {
 	// Pin change interrupt

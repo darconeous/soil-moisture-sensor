@@ -1,5 +1,11 @@
-/default
-*.o
+.DS_Store
 *.bak
 *.swp
-
+/*.o
+/main.elf
+/main.hex
+/main.hex-eeprom
+/soil-moisture-sensor.xcworkspace
+*.b#[0123456789]
+*.s#[0123456789]
+/default

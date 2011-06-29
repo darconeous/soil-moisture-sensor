@@ -13,7 +13,7 @@
 
 uint16_t
 moist_calc() {
-	uint8_t v;
+	uint16_t v;
 
 	// Make sure pins are configured.
 	cbi(PORTB,MOIST_DRIVE_PIN);
@@ -43,6 +43,6 @@ moist_calc() {
 	sbi(DDRB,MOIST_COLLECTOR_PIN);
 
 
-	return v<<8;
+	return v;
 }
 
