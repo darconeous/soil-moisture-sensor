@@ -7,9 +7,13 @@
 #include <string.h>
 #include "eeprom.h"
 
+#define sbi(x,y)	x|=(1<<y)
+#define cbi(x,y)	x&=~(1<<y)
+
 #define 	ATTR_NO_INIT   __attribute__ ((section (".noinit")))
 
 #define DEVICE_IS_SPACE_CONSTRAINED	(defined (__AVR_ATtiny13__) || defined (__AVR_ATtiny13A__))
+
 
 struct {
 	uint16_t value;
@@ -18,38 +22,48 @@ struct {
 	uint8_t config;
 	uint8_t calib_range;
 	uint8_t calib_offset;
-	uint8_t pad;
 	
 	// End DS18B20-compatible zone
 
-	uint16_t voltage;	
-	uint8_t ceiling;	
-	uint8_t floor;
-	uint8_t count;
+	uint8_t voltage;	
 } msensor_scratch ATTR_NO_INIT;
 
 
 void
 owslave_cb_convert() {
 	uint8_t tmp;
-	uint16_t value = moist_calc();
-	
-	// Calibrate
-	value -= msensor_scratch.calib_offset;
-	value <<= 8;
-	value /= msensor_scratch.calib_range;
-	
-	msensor_scratch.value = value;
-	
-	tmp = ((uint8_t*)&msensor_scratch.value)[1];
+	uint16_t value;
 
-	if(tmp<msensor_scratch.floor)
-		msensor_scratch.floor = tmp;
+#if defined(__AVR_ATtiny13__) || defined (__AVR_ATtiny13A__)
+	// Vref=Vcc, Input=PORTB2
+	ADMUX = _BV(ADLAR)|_BV(MUX0);
+	cbi(DDRB,2);
+	sbi(PORTB,2);
+#else
+	// Vref=Vcc, Input=Vbg
+	ADMUX = _BV(ADLAR)|_BV(REFS1)|_BV(MUX3)|_BV(MUX2);
+#endif
+	ADCSRA = _BV(ADEN)|_BV(ADSC)|_BV(ADPS2)|_BV(ADPS1);
+	
+	value = moist_calc();
 
-	if(tmp>msensor_scratch.ceiling)
-		msensor_scratch.ceiling = tmp;
-
-	msensor_scratch.count++;
+	loop_until_bit_is_set(ADCSRA,ADIF);
+	sbi(ADCSRA,ADSC);
+	loop_until_bit_is_set(ADCSRA,ADIF);
+	ADCSRA = 0;
+	
+	if(!(msensor_scratch.config&CONFIG_FLAG_RAW_VALUE))
+	{
+		// Apply calibration
+		value -= msensor_scratch.calib_offset;
+		value *= 256;
+		value /= msensor_scratch.calib_range;
+		if(value >= 256)
+			value = 0xFF;
+	}
+	
+	msensor_scratch.value = value<<8;
+	msensor_scratch.voltage = ADCH;
 }
 
 bool

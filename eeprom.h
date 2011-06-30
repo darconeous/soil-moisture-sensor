@@ -1,6 +1,8 @@
 
 #include <avr/eeprom.h>
 
+#define CONFIG_FLAG_RAW_VALUE		(1<<0)
+
 struct msensor_e2_t {
 	uint8_t alarm_high;
 	uint8_t alarm_low;

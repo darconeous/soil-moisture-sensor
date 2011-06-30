@@ -1,9 +1,11 @@
 
-DEVICE=attiny13a
-AVRDUDE_DEVICE=t13
+#DEVICE=attiny13a
+#AVRDUDE_DEVICE=t13
+#CFLAGS += -DF_CPU=9600000
 
-#DEVICE=attiny25
-#AVRDUDE_DEVICE=t25
+DEVICE=attiny25
+AVRDUDE_DEVICE=t25
+CFLAGS += -DF_CPU=8000000
 
 CC=avr-gcc
 OBJCOPY=avr-objcopy
@@ -15,7 +17,6 @@ CFLAGS += -mmcu=$(DEVICE)
 LDFLAGS += -mmcu=$(DEVICE)
 
 CFLAGS += -Os
-CFLAGS += -DF_CPU=9600000
 CFLAGS += -std=c99
 CFLAGS += -fpack-struct
 CFLAGS += -fshort-enums
@@ -23,6 +24,7 @@ CFLAGS += -gdwarf-2
 
 AVRDUDEFLAGS += -y
 AVRDUDEFLAGS += -c dragon_dw
+#AVRDUDEFLAGS += -c dragon_isp
 AVRDUDEFLAGS += -P usb
 
 # The following two lines strip out unused functions and symbols, making the executable smaller.

@@ -41,25 +41,25 @@ owslave_addr_t owslave_addr EEMEM = {
 **	Voh = Vcc-Vod
 **
 **	For the ADC, we set the reference voltage to Vcc and set the measured
-**	voltage to the bandgap reference, which is around 1.1v. That gives us
+**	voltage to the bandgap reference (Vbg), which is around 1.1v. That gives us
 **	something like this:
 **
-**	ADC_OUTPUT = Vint*ADC_MAX/Vcc
+**	ADC = Vbg*ADC_MAX/Vcc
 **	
 **	Since the voltage present at I/O pin that is driven high is less than
 **	the I/O voltage(by 0.8 volts), we get something closer to this:
 **
-**	ADC_OUTPUT = Vint*ADC_MAX/Voh
+**	ADC = Vbg*ADC_MAX/Voh
 **
 **	Solving for Voh gives us:
 **
-**	ADC_OUTPUT*Voh = Vint*ADC_MAX
+**	ADC*Voh = Vbg*ADC_MAX
 **	...
-**	Voh = Vint*ADC_MAX/ADC_OUTPUT
+**	Voh = Vbg*ADC_MAX/ADC
 **
 **	We plug that into the calib_range' equation from above, and we get:
 **
-**	env_factor = (5.0-Vod-Vih)/(Vint*ADC_MAX/ADC_OUTPUT-Vih)
+**	env_factor = (5.0-Vod-Vih)/(Vbg*ADC_MAX/ADC-Vih)
 **
 **	Temperature will affect the moisture readings in complicated ways, for
 **	two reasons:
@@ -76,9 +76,9 @@ owslave_addr_t owslave_addr EEMEM = {
 struct msensor_e2_t msensor_e2 EEMEM = {
 	.alarm_high = 0xFF,
 	.alarm_low = 0x00,
-	.config = 0x00,
-	.calib_range = 0x1F,
-	.calib_offset = 4,
+//	.config = CONFIG_FLAG_RAW_VALUE,
+	.calib_range = 0x16,
+	.calib_offset = 5,
 };
 
 char device_name[32] EEMEM = "";
