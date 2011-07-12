@@ -1,0 +1,32 @@
+## Calibration info calculation ##
+
+measured_none: Measured value for sensor suspended in open air at 20°C, 5v.
+measured_full: Measured value when sensing element is fully submerged
+               in salt water at 20°C, 5v.
+max_value: Target value for maximum reading.
+Vih: Minimum voltage for a I/O line to read as 'HIGH'. This value is
+     approx 0.7 volts.
+Vint: internal voltage refence
+Vod:	(Vcc-Voh), voltage drop for an I/O pin driven high
+env_factor:	Compensation for voltage and temperature.
+
+	calib_offset = measured_none
+	calib_range = (measured_full-measured_none)
+
+	calib_value = (value-calib_offset*env_factor)*env_factor*max_value/calib_range
+
+Other variables to consider: temperature and voltage.
+
+Since the read threshold voltage for I/O pins is Vcc/2, we can disregard
+voltage because it is already self-compensating.
+
+Temperature will affect the moisture readings in complicated ways, for
+two reasons:
+
+	* Ice doesn't conduct electricity, so readings should start to
+	  quickly decrease below ~4°C.
+	* The capacity of the holding capacitor will increase at colder
+	  temps, and decrease at higher temps. This behavior is the inverse
+	  of the ice issue above.
+
+TODO: Figure out the temperature compensation.

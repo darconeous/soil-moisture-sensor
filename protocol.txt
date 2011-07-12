@@ -1,0 +1,45 @@
+Protocol
+
+This sensor uses the 1-wire slave protocol. It supports the following ROM funcitons:
+
+	0x33 READROM
+	0x55 MATCHROM
+	0xCC SKIPROM
+	0xF0 SEARCH
+	0xEC ALARMSEARCH
+
+It supports the following funciton commands:
+
+DS18B20 Compatibility: (Temperature only)
+	0x44 CONVERT_T
+	0xBE RD_SCRATCH
+
+Name access:	(For storing the name of the sensor as a UTF-8 string)
+	0xF1 RD_NAME
+	0xF2 WR_NAME
+
+Sensor access: (DS2450 compatible)
+	0x3C CONVERT
+	0xAA RD_MEM
+	0x55 WR_MEM
+
+Channel A is normalized moisture level. Alarms are supported on this channel.
+Channel B is raw temperature reading. Alarms are *NOT* supported on this channel.
+Channel C is raw voltage reading. Alarms are *NOT* supported on this channel.
+Channel D is raw capacitive reading. Alarms are *NOT* supported on this channel.
+
+Memory Map Page 3:
+	0x18:	C_range
+	0x19:	C_offset
+	0x1A:	C_samplecount
+	0x1B:	Not currently used. Write as 0x00.
+	0x1C:	Write as 0x40
+	0x1D:	temp_offset
+	0x1E:	Not currently used. Write as 0x00.
+	0x1F:	Not currently used. Write as 0x00.
+
+See notes.txt for more information on calibration values.
+
+Unlike a real DS2450, this devie will be busy while converting. Send read
+slots to determine when it is finished---will read '1' when done.
+

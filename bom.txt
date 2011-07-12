@@ -1,0 +1,99 @@
+## Bill of Materials
+
+Desc:       4.5"^2 Circuit Board
+Count:      1
+Cost@1x:    USD$21.25
+Cost@25x:   USD$5.00
+Cost@Mass:  USD$0.54
+Source:     http://www.goldphoenixpcb.biz/
+Source:     http://batchpcb.com/
+
+Desc:       ATtiny25V-10S (EIAJ, "Wide" SOIC)
+PartNames:	IC1
+Count:      1
+Cost@1x:    USD$1.80
+Cost@25x:   USD$1.10
+Cost@Mass:  USD$1.08
+Source:     http://www.mouser.com/Search/Refine.aspx?Keyword=ATTINY25V-10S
+Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=ATtiny25V-10S
+AltParts:	ATtiny25-10S
+
+Desc:       0805 or 0603 1µF Capacitor X7R
+PartNames:	C1, C2
+Count:      2
+Cost@1x:    USD$0.27    (PN C2012X7R1A105K)
+Cost@25x:   USD$0.09    (PN CC0805KKX7R7BB105)
+Cost@Mass:  USD$0.016   (PN CC0805KKX7R7BB105)
+Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=CC0805KKX7R7BB105
+
+Desc:       0805 or 0603 470kΩ Resistor
+PartNames:	R1, R2
+Count:      2
+Cost@1x:    USD$0.02    (PN ERJ-3GEYJ474V)
+Cost@25x:   USD$0.02    (PN ERJ-3GEYJ474V)
+Cost@Mass:  USD$0.00131 (PN RC0603JR-07470KL)
+Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=RC0603JR-07470KL
+
+Desc:       0.1" 6-Position Polarized Shrouded Header
+PartNames:	J1
+Count:      1
+Cost@1x:    USD$1.56    (PN 102617-1)
+Cost@25x:   USD$1.40    (PN 102617-1)
+Cost@Mass:  USD$1.07    (PN 102617-1)
+Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A26757-ND
+
+** FUNCTIONALLY-OPTIONAL-PART
+** The following part is needed for legal reasons, due to USPAT#6,108,751.
+** It may be possible to negotiate a simple licence agreement with
+** Maxim that could avoid adding this extra part, for a per-device
+** license fee, but this remains to be seen.
+Desc:       DS2401X1 Silicon Serial Number (Flip-Chip)
+PartNames:	IC2
+Count:      1
+Cost@1x:    USD$1.40
+Cost@25x:   USD$0.97
+Cost@Mass:  USD$0.59
+Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=DS2401X1
+Source:     http://www.mouser.com/Search/Refine.aspx?Keyword=DS2401X1
+
+## Approximate Unit Part Cost Breakdown
+
+Unit Cost @1x:      USD$24.99   ~USD$124.95 for 5 Units
+   w/DS2401X1:      USD$26.39   ~USD$131.95 for 5 Units
+
+Unit Cost @25x:     USD$7.70    ~USD$192.50 for 25 Units
+    w/DS2401X1:     USD$8.67    ~USD$216.75 for 25 Units
+
+Unit Cost @Mass:    USD$2.82    ~USD$11,280.00 for ~4,000 Units
+     w/DS2401X1:    USD$3.41    ~USD$13,640.00 for ~4,000 Units
+
+## Parts for Mating Connector
+
+Additionally, you may want some connectors to plug into that shrouded header:
+
+Solder-socket plug:
+    http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A33380-ND
+
+Board-mount:
+    http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A32934-ND
+
+Housing:
+    http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A25849-ND
+    http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A25848-ND
+    
+Crimp-pins for housing:
+    http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A25959
+
+## Additional Finishing Materials
+
+ * Plasti-Dip, to water-deal the sensing section. <http://www.plastidip.com/>
+ * Epoxy or Silicone, for potting the electronics above the sensing section.
+
+## Patent References
+
+USPAT#5,210,846
+USPAT#6,108,751
+http://patimg1.uspto.gov/.piw?Docid=05210846&idkey=NONE
+http://patimg1.uspto.gov/.piw?Docid=06108751&idkey=NONE
+http://www.buoy.com/pipermail/1-wire-software-development/2004-November/000163.html
+http://dics.voicecontrol.ro/process_mails/arata_discutia/129197/Implementing_1-wire_slaves.html
