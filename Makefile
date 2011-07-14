@@ -27,6 +27,8 @@ CFLAGS += -std=c99
 CFLAGS += -fpack-struct
 CFLAGS += -fshort-enums
 CFLAGS += -gdwarf-2
+#CFLAGS += -mcall-prologues
+#CFLAGS += -mint8
 
 AVRDUDEFLAGS += -y
 AVRDUDEFLAGS += -c dragon_dw

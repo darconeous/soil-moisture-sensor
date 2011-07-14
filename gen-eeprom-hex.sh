@@ -1,6 +1,6 @@
 #!/bin/bash
 
-OW_TYPE=0x01
+OW_TYPE=0xA0
 
 function UpdateCRC() {
 	local i
@@ -19,6 +19,8 @@ function UpdateCRC() {
 function MakeSerial() {
 	CRC=0x00
 	SUM=0x08
+
+	SUM=$((SUM+$OW_TYPE))
 	UpdateCRC $OW_TYPE
 	printf ":08000000"
 	printf "%02X" $OW_TYPE
@@ -41,7 +43,7 @@ function MakeSerial() {
 	printf "%02X" $CRC
 	SUM=$((SUM+CRC))
 
-	printf "%02X\n" $((((~SUM) & 0xFF)))
+	printf "%02X\n" $((((~SUM+1) & 0xFF)))
 }
 
 # Record type 4, size 2 bytes... 0x00 0x08
