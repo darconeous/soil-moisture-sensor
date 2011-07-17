@@ -79,7 +79,7 @@ burn-eeprom:
 	$(OBJCOPY) -O ihex -R .eeprom -R .fuse -R .signature $< $@
 
 %.lss: %.elf
-	$(OBJDUMP) -h -S $< > $@
+	$(OBJDUMP) -h -t -S $< > $@
 
 %.eep: %.elf
 	$(OBJCOPY) -O ihex -j .eeprom $< $@

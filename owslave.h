@@ -48,7 +48,7 @@ enum {
 
 	// Custom
 	OWSLAVE_FUNCCMD_RD_NAME=0xF1,
-	OWSLAVE_FUNCCMD_WR_NAME=0xF2,
+	OWSLAVE_FUNCCMD_WR_NAME=0xFE,
 };
 
 typedef union {
@@ -75,6 +75,14 @@ extern void owslave_cb_write_byte(
 extern bool owslave_cb_alarm_condition();
 extern void owslave_cb_recall();
 extern void owslave_cb_commit();
+#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+extern void owslave_begin_busy();
+extern void owslave_end_busy();
+#else
+#define owslave_begin_busy()    do {} while(0)
+#define owslave_end_busy()  do {} while(0)
+#endif
+
 
 
 #endif

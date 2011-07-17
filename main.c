@@ -1,4 +1,3 @@
-#include "owslave.h"
 #include <avr/io.h>
 #include <avr/eeprom.h>
 #include <avr/interrupt.h>
@@ -9,9 +8,11 @@
 #include <util/delay.h>
 #include <stdint.h>
 
-//#define OLD_SOIL_MOISTURE_SENSOR_BOARD  1
+#define OLD_SOIL_MOISTURE_SENSOR_BOARD  0
 
-#define EXTRA_TEMP_RESOLUTION           3
+#define EXTRA_TEMP_RESOLUTION           4
+
+#define CALIBRATED_BITS		10
 
 #ifndef MOIST_DRIVE_PIN
 #define MOIST_DRIVE_PIN             4
@@ -68,6 +69,8 @@
 #ifndef DO_CALIBRATION
 #define DO_CALIBRATION          !DEVICE_IS_SPACE_CONSTRAINED
 #endif
+
+#include "owslave.h"
 
 // ----------------------------------------------------------------------------
 
@@ -154,7 +157,7 @@ register uint8_t was_interrupted __asm__("r3");
 
 owslave_addr_t owslave_addr EEMEM = {
 	.s.type		= OWSLAVE_TYPE_MOIST,
-	.s.serial	= { 0x00,		   0x00,0x00, 0x00, 0x00, 0xff },
+	.s.serial	= { 0x00, 0x00, 0x00, 0x00, 0x00, 0xff },
 	.s.crc		= 0x4D
 };
 
@@ -212,6 +215,229 @@ uint16_t median_uint16(
 	return b;
 }
 #endif
+
+// ----------------------------------------------------------------------------
+#pragma mark -
+#pragma mark Other
+
+uint8_t
+owslave_cb_alarm_condition() {
+	uint8_t ret = 0;
+#if !DEVICE_IS_SPACE_CONSTRAINED
+	for(int i = 0; i < 4; i++)
+		ret |= !!(((uint16_t*)&cfg)[i] & (ALARM_FLAG_H | ALARM_FLAG_L));
+#endif
+	return ret;
+}
+
+void
+update_alarm_flags() {
+#if !DEVICE_IS_SPACE_CONSTRAINED
+	for(uint8_t i = 0; i < 8; i += 2) {
+		uint8_t tmp = ((uint8_t*)&value)[i + 1];
+		uint16_t cfg = ((uint16_t*)&cfg)[i / 2];
+
+		cfg &= ~(ALARM_FLAG_L | ALARM_FLAG_H);
+
+		if((cfg & ALARM_ENABLE_L) && (tmp <= ((uint8_t*)&alarm)[i]))
+			cfg |= ALARM_FLAG_L;
+
+		if((cfg & ALARM_ENABLE_H) && (tmp >= ((uint8_t*)&alarm)[i + 1]))
+			cfg |= ALARM_FLAG_H;
+
+	    ((uint16_t*)&cfg)[i / 2] = cfg;
+	}
+#endif
+}
+
+// This is the general capacitance-reading function.
+uint16_t
+moist_calc() {
+	uint16_t v;
+
+#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+again:
+#endif
+
+	// Make sure pins are configured.
+	cbi(PORTB, MOIST_DRIVE_PIN);
+	cbi(PORTB, MOIST_COLLECTOR_PIN);
+	sbi(DDRB, MOIST_DRIVE_PIN);
+	sbi(DDRB, MOIST_COLLECTOR_PIN);
+
+	// Wait long enough for the sensing capacitor to fully flush.
+	_delay_us(10);
+
+#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+	was_interrupted = 0;
+#else
+	cli();
+#endif
+
+	cbi(DDRB, MOIST_DRIVE_PIN);
+	cbi(DDRB, MOIST_COLLECTOR_PIN);
+
+	for(v = 0;
+	        (v != MOIST_MAX_VALUE) &&
+	    bit_is_clear(PINB, MOIST_COLLECTOR_PIN);
+	    v++
+	) {
+		sbi(PORTB, MOIST_DRIVE_PIN);
+#if MOIST_FULLY_DRIVE_PULSES
+		sbi(DDRB, MOIST_DRIVE_PIN);
+		cbi(DDRB, MOIST_DRIVE_PIN);
+#endif
+		cbi(PORTB, MOIST_DRIVE_PIN);
+#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+		if(was_interrupted)
+			goto again;
+		_NOP();
+#else
+		_delay_us(1);
+#endif
+	}
+
+	// Turn interrupts back on.
+#if !OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+	sei();
+#endif
+
+	// Pull both lines low to avoid floating inputs
+	sbi(DDRB, MOIST_DRIVE_PIN);
+	sbi(DDRB, MOIST_COLLECTOR_PIN);
+
+	return v;
+}
+
+void
+convert_voltage() {
+#if SUPPORT_VOLTAGE_READING
+#if defined(__AVR_ATtiny13__) || defined (__AVR_ATtiny13A__)
+	// Vref=Vcc, Input=PORTB2
+	ADMUX = _BV(MUX0);
+	cbi(DDRB, 2);
+	sbi(PORTB, 2);
+#else
+	// Vref=Vcc, Input=Vbg
+	ADMUX = _BV(MUX3) | _BV(MUX2);
+#endif
+
+	// Throw away the first reading.
+	sbi(ADCSRA, ADSC);
+	_delay_ms(1);
+	loop_until_bit_is_clear(ADCSRA, ADSC);
+
+	// Now read the voltage for real.
+	sbi(ADCSRA, ADSC);
+	loop_until_bit_is_clear(ADCSRA, ADSC);
+
+	value.voltage = ADC;
+#endif // SUPPORT_VOLTAGE_READING
+}
+
+void
+convert_temp() {
+#if EMULATE_DS18B20
+	uint16_t temp = 0;
+
+	ADMUX = _BV(REFS1) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1) | _BV(MUX0);
+
+	// Throw away the first reading.
+	sbi(ADCSRA, ADSC);
+	loop_until_bit_is_clear(ADCSRA, ADSC);
+
+	for(int i = 0; i < (1 << (4 + EXTRA_TEMP_RESOLUTION)); i++) {
+		sbi(ADCSRA, ADSC);
+		loop_until_bit_is_clear(ADCSRA, ADSC);
+		temp += ADC - 270 + calib.temp_offset;
+	}
+	temp >>= EXTRA_TEMP_RESOLUTION;
+
+	value.temp = temp;
+#endif
+}
+
+void
+convert_moisture() {
+	uint16_t value_a = 0;
+
+	for(uint8_t i = calib.samplecount; i; --i)
+		value_a += moist_calc();
+
+#if DO_MEDIAN_FILTERING
+	{
+		uint16_t value_b = 0;
+		uint16_t value_c = 0;
+
+		_delay_ms(1);
+
+		for(uint8_t i = calib.samplecount; i; --i)
+			value_b += moist_calc();
+
+		_delay_ms(1);
+
+		for(uint8_t i = calib.samplecount; i; --i)
+			value_c += moist_calc();
+
+		value_a = median_uint16(value_a, value_b, value_c);
+	}
+#endif
+
+	value.raw = value_a;
+
+#if DO_CALIBRATION
+	// Apply calibration
+	{
+		uint16_t tmp = calib.offset * calib.samplecount;
+		if(value_a >= tmp)
+			value_a -= calib.offset * calib.samplecount;
+		else
+			value_a = 0;
+
+		value_a = ((uint32_t)value_a * (1<<CALIBRATED_BITS))
+			/ ((uint32_t)calib.range * calib.samplecount);
+
+		if(value_a > (1<<CALIBRATED_BITS)-1)
+			value_a = (1<<CALIBRATED_BITS)-1;
+
+		value_a <<= 16-CALIBRATED_BITS;
+	}
+	value.moisture = value_a;
+#endif
+}
+
+void
+owslave_cb_convert() {
+	owslave_begin_busy();
+
+	// Set all values to OxFFFF
+//#if !DEVICE_IS_SPACE_CONSTRAINED
+	for(uint8_t i=8;i--;)
+		((uint8_t*)&value)[i]=0xFF;
+//#endif
+
+	convert_voltage();
+	convert_temp();
+	convert_moisture();
+
+	update_alarm_flags();
+
+	owslave_end_busy();
+}
+
+void
+owslave_cb_recall() {
+	eeprom_busy_wait();
+	eeprom_read_block(&cfg, &cfg_eeprom, sizeof(cfg_eeprom) +
+		sizeof(alarm_eeprom) + sizeof(calib_eeprom));
+}
+
+void
+owslave_cb_commit() {
+	eeprom_update_block(&cfg, &cfg_eeprom, sizeof(cfg_eeprom) +
+		sizeof(alarm_eeprom) + sizeof(calib_eeprom));
+	eeprom_busy_wait();
+}
 
 // ----------------------------------------------------------------------------
 #pragma mark -
@@ -289,8 +515,27 @@ owslave_write_byte(uint8_t byte) {
 	}
 }
 
+#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
 void
-owslave_main() {
+owslave_begin_busy() {
+	sbi(TIMSK0, OCIE0A);
+}
+
+void
+owslave_end_busy() {
+	cbi(DDRB, OWSLAVE_IOPIN);
+	cbi(TIMSK0, OCIE0A);
+}
+#endif
+
+extern void __init(void) __attribute__ ((naked)) __attribute__ ((section (".init0")));;
+extern void __do_clear_bss(void) __attribute__ ((naked));
+extern void main (void) __attribute__ ((naked)) __attribute__ ((section (".init8")));
+
+void __do_clear_bss() { }
+
+void
+main(void) {
 	uint8_t cmd;
 	uint8_t flags;
 
@@ -309,6 +554,10 @@ owslave_main() {
 
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
 	OCR0A = (uint8_t)(30l * F_CPU / 8l / 1000000l);
+#endif
+
+#if SUPPORT_VOLTAGE_READING || EMULATE_DS18B20
+	ADCSRA = _BV(ADEN) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
 #endif
 
 	// Allow the 1wire pin to generate interrupts.
@@ -473,22 +722,6 @@ wait_for_reset:
 }
 
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-void
-owslave_begin_busy() {
-	sbi(TIMSK0, OCIE0A);
-}
-
-void
-owslave_end_busy() {
-	cbi(DDRB, OWSLAVE_IOPIN);
-	cbi(TIMSK0, OCIE0A);
-}
-#else
-#define owslave_begin_busy()    do {} while(0)
-#define owslave_end_busy()  do {} while(0)
-#endif
-
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
 ISR(TIM0_COMPA_vect) {
 	cbi(DDRB, OWSLAVE_IOPIN);
 	was_interrupted++;
@@ -519,221 +752,3 @@ ISR(PCINT0_vect) {
 	}
 }
 
-// ----------------------------------------------------------------------------
-#pragma mark -
-#pragma mark Other
-
-uint8_t
-owslave_cb_alarm_condition() {
-	uint8_t ret = 0;
-
-	for(int i = 0; i < 4; i++)
-		ret |=
-		    !(uint8_t) !(((uint16_t*)&cfg)[i] &
-		        (ALARM_FLAG_H | ALARM_FLAG_L));
-
-	return ret;
-}
-
-void
-update_alarm_flags() {
-	for(uint8_t i = 0; i < 8; i += 2) {
-		uint8_t tmp = ((uint8_t*)&value)[i + 1];
-		uint16_t cfg = ((uint16_t*)&cfg)[i / 2];
-
-		cfg &= ~(ALARM_FLAG_L | ALARM_FLAG_H);
-
-		if((cfg & ALARM_ENABLE_L) && (tmp <= ((uint8_t*)&alarm)[i]))
-			cfg |= ALARM_FLAG_L;
-
-		if((cfg & ALARM_ENABLE_H) && (tmp >= ((uint8_t*)&alarm)[i + 1]))
-			cfg |= ALARM_FLAG_H;
-
-		    ((uint16_t*)&cfg)[i / 2] = cfg;
-	}
-}
-
-// This is the general capacitance-reading function.
-uint16_t
-moist_calc() {
-	uint16_t v;
-
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-again:
-#endif
-
-	// Make sure pins are configured.
-	cbi(PORTB, MOIST_DRIVE_PIN);
-	cbi(PORTB, MOIST_COLLECTOR_PIN);
-	sbi(DDRB, MOIST_DRIVE_PIN);
-	sbi(DDRB, MOIST_COLLECTOR_PIN);
-
-	// Wait long enough for the sensing capacitor to fully flush.
-	_delay_us(10);
-
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-	was_interrupted = 0;
-#else
-	cli();
-#endif
-
-	cbi(DDRB, MOIST_DRIVE_PIN);
-	cbi(DDRB, MOIST_COLLECTOR_PIN);
-
-	for(v = 0;
-	        (v != MOIST_MAX_VALUE) &&
-	    bit_is_clear(PINB, MOIST_COLLECTOR_PIN);
-	    v++
-	) {
-		sbi(PORTB, MOIST_DRIVE_PIN);
-#if MOIST_FULLY_DRIVE_PULSES
-		sbi(DDRB, MOIST_DRIVE_PIN);
-		cbi(DDRB, MOIST_DRIVE_PIN);
-#endif
-		cbi(PORTB, MOIST_DRIVE_PIN);
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-		if(was_interrupted)
-			goto again;
-		_NOP();
-#else
-		_delay_us(1);
-#endif
-	}
-
-	// Turn interrupts back on.
-#if !OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-	sei();
-#endif
-
-	// Pull both lines low to avoid floating inputs
-	sbi(DDRB, MOIST_DRIVE_PIN);
-	sbi(DDRB, MOIST_COLLECTOR_PIN);
-
-	return v;
-}
-
-void
-owslave_cb_convert() {
-	owslave_begin_busy();
-
-	// Set all values to OxFFFF
-#if !DEVICE_IS_SPACE_CONSTRAINED
-	memset(&value, 0xFF, 8);
-#endif
-
-#if SUPPORT_VOLTAGE_READING || EMULATE_DS18B20
-	ADCSRA = _BV(ADEN) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
-#endif
-
-#if SUPPORT_VOLTAGE_READING
-#if defined(__AVR_ATtiny13__) || defined (__AVR_ATtiny13A__)
-	// Vref=Vcc, Input=PORTB2
-	ADMUX = _BV(MUX0);
-	cbi(DDRB, 2);
-	sbi(PORTB, 2);
-#else
-	// Vref=Vcc, Input=Vbg
-	ADMUX = _BV(MUX3) | _BV(MUX2);
-#endif
-
-	// Throw away the first reading.
-	sbi(ADCSRA, ADSC);
-	_delay_ms(1);
-	loop_until_bit_is_clear(ADCSRA, ADSC);
-
-	// Now read the voltage for real.
-	sbi(ADCSRA, ADSC);
-	loop_until_bit_is_clear(ADCSRA, ADSC);
-
-	value.voltage = ADC;
-#endif // SUPPORT_VOLTAGE_READING
-
-#if EMULATE_DS18B20
-	ADMUX = _BV(REFS1) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1) | _BV(MUX0);
-
-	// Throw away the first reading.
-	sbi(ADCSRA, ADSC);
-	loop_until_bit_is_clear(ADCSRA, ADSC);
-
-	value.temp = 0;
-	for(int i = 0; i < (1 << (4 + EXTRA_TEMP_RESOLUTION)); i++) {
-		sbi(ADCSRA, ADSC);
-		loop_until_bit_is_clear(ADCSRA, ADSC);
-		value.temp += ADC - 270 + calib.temp_offset;
-	}
-	value.temp >>= EXTRA_TEMP_RESOLUTION;
-#endif
-
-	uint16_t value_a = 0;
-
-	for(uint8_t i = 0; i < calib.samplecount; i++)
-		value_a += moist_calc();
-
-#if DO_MEDIAN_FILTERING
-	{
-		uint16_t value_b = 0;
-		uint16_t value_c = 0;
-
-		_delay_ms(1);
-
-		for(uint8_t i = 0; i < calib.samplecount; i++)
-			value_b += moist_calc();
-
-		_delay_ms(1);
-
-		for(uint8_t i = 0; i < calib.samplecount; i++)
-			value_c += moist_calc();
-
-		value_a = median_uint16(value_a, value_b, value_c);
-	}
-#endif
-
-	value.raw = value_a;
-
-#if DO_CALIBRATION
-	// Apply calibration
-	{
-		uint16_t tmp = calib.offset * calib.samplecount;
-		if(value_a >= tmp)
-			value_a -= calib.offset * calib.samplecount;
-		else
-			value_a = 0;
-
-		value_a =
-		    ((uint32_t)value_a *
-		    1024) / ((uint32_t)calib.range * calib.samplecount);
-
-		if(value_a >= 1024)
-			value_a = 0x3FF;
-
-		value_a <<= 6;
-	}
-#endif
-
-	value.moisture = value_a;
-
-	update_alarm_flags();
-
-	owslave_end_busy();
-}
-
-void
-owslave_cb_recall() {
-	eeprom_busy_wait();
-	eeprom_read_block(&cfg, &cfg_eeprom, sizeof(cfg_eeprom) +
-		sizeof(alarm_eeprom) + sizeof(calib_eeprom));
-}
-
-void
-owslave_cb_commit() {
-	eeprom_update_block(&cfg, &cfg_eeprom, sizeof(cfg_eeprom) +
-		sizeof(alarm_eeprom) + sizeof(calib_eeprom));
-	eeprom_busy_wait();
-}
-
-void
-main(void) {
-	// Main loop.
-	owslave_main();
-	wdt_enable(WDTO_15MS);
-}
