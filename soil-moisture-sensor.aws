@@ -3,5 +3,5 @@
   <IOSettings>
     <CurrentRegisters/>
   </IOSettings>
-  <part name="ATtiny13A"/>
+  <part name="ATtiny25"/>
 </AVRWorkspace>
