@@ -38,10 +38,6 @@
 #endif
 #endif
 
-#ifndef ENABLE_WATCHDOG
-#define ENABLE_WATCHDOG         1
-#endif
-
 #ifndef DEVICE_IS_SPACE_CONSTRAINED
 #define DEVICE_IS_SPACE_CONSTRAINED (FLASHEND <= 0x3FF)
 #endif
@@ -52,6 +48,10 @@
 
 #ifndef SUPPORT_DEVICE_NAMING
 #define SUPPORT_DEVICE_NAMING   0
+#endif
+
+#ifndef ENABLE_WATCHDOG
+#define ENABLE_WATCHDOG			!DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
 #ifndef SUPPORT_VOLTAGE_READING
@@ -100,6 +100,11 @@
 #endif
 #endif
 
+#define TEMP_RESOLUTION_MAX					(0x7)
+
+#define TEMP_RESOLUTION_MASK				(0x7)
+#define OVERSAMPLE_COUNT_EXPONENT_MASK		(0xF)
+
 // ----------------------------------------------------------------------------
 #pragma mark -
 #pragma mark Memory Page Layout
@@ -108,42 +113,27 @@
 struct {
 	uint16_t	moisture;
 	uint16_t	raw;
-	uint16_t	temp;
+	int16_t		temp;
 	uint16_t	voltage;
 } value ATTR_NO_INIT;
 
-// Page 2 - cfguration
+// Page 2 - configuration
 struct cfg_t {
-	uint16_t	moisture;
-	uint16_t	raw;
-	uint16_t	temp;
-	uint16_t	voltage;
+	uint16_t	alarm_low;
+	uint16_t	alarm_high;
+
+	uint8_t		flags;
+	uint8_t		reserved[3];
 } cfg ATTR_NO_INIT;
 
-// Page 3 - Alarms
-struct alarm_t {
-	uint8_t moisture_low;
-	uint8_t moisture_high;
-
-	uint8_t pad[2];
-
-	uint8_t temp_low;
-	uint8_t temp_high;
-
-	uint8_t voltage_low;
-	uint8_t voltage_high;
-} alarm ATTR_NO_INIT;
-
-// Page 4 - Calibration
+// Page 3 - Calibration
 struct calib_t {
 	uint8_t range;
 	uint8_t offset;
-	uint8_t samplecount;
-
-	uint8_t reserved;
-
+	uint8_t flags;
 	int8_t	temp_offset;
-	uint8_t pad[3];
+
+	uint8_t reserved[4];
 } calib ATTR_NO_INIT;
 
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
@@ -161,36 +151,21 @@ owslave_addr_t owslave_addr EEMEM = {
 	.s.crc		= 0x4D
 };
 
-enum {
-	ALARM_ENABLE_L = (1 << 10),
-	ALARM_ENABLE_H = (1 << 11),
-	ALARM_FLAG_L = (1 << 12),
-	ALARM_FLAG_H = (1 << 13),
-};
-
 struct cfg_t cfg_eeprom EEMEM = {
-	.moisture	= ALARM_ENABLE_L | ALARM_ENABLE_H,
-	.raw		= 0,
-	.temp		= ALARM_ENABLE_L | ALARM_ENABLE_H,
-	.voltage	= 0,
-};
-
-struct alarm_t alarm_eeprom EEMEM = {
-	0x00, 0xFF,
-	0x00, 0xFF,
-	0x00, 0xFF,
-	0x00, 0xFF,
+	.alarm_low		= 0x0000,
+	.alarm_high		= 0xFFFF,
+	.flags			= 0x00 | (7&TEMP_RESOLUTION_MASK),
 };
 
 struct calib_t calib_eeprom EEMEM = {
 	.range			= (95 - 8),
 	.offset			= (8),
-	.samplecount	= 128,
-	.temp_offset	= 24 - 9,
+	.flags			= 0x7,
+	.temp_offset	= 0,
 };
 
 #if SUPPORT_DEVICE_NAMING
-char device_name[32] EEMEM = "";
+char device_name[16] EEMEM = "";
 #endif
 
 // ----------------------------------------------------------------------------
@@ -198,7 +173,8 @@ char device_name[32] EEMEM = "";
 #pragma mark Misc. Helper Functions
 
 #if DO_MEDIAN_FILTERING
-uint16_t median_uint16(
+static uint16_t
+median_uint16(
 	uint16_t a, uint16_t b, uint16_t c
 ) {
 	if(a < c) {
@@ -220,38 +196,29 @@ uint16_t median_uint16(
 #pragma mark -
 #pragma mark Other
 
-uint8_t
-owslave_cb_alarm_condition() {
-	uint8_t ret = 0;
-#if !DEVICE_IS_SPACE_CONSTRAINED
-	for(int i = 0; i < 4; i++)
-		ret |= !!(((uint16_t*)&cfg)[i] & (ALARM_FLAG_H | ALARM_FLAG_L));
-#endif
-	return ret;
+#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+static void
+owslave_begin_busy() {
+	sbi(TIMSK0, OCIE0A);
 }
 
-void
-update_alarm_flags() {
-#if !DEVICE_IS_SPACE_CONSTRAINED
-	for(uint8_t i = 0; i < 8; i += 2) {
-		uint8_t tmp = ((uint8_t*)&value)[i + 1];
-		uint16_t cfg = ((uint16_t*)&cfg)[i / 2];
-
-		cfg &= ~(ALARM_FLAG_L | ALARM_FLAG_H);
-
-		if((cfg & ALARM_ENABLE_L) && (tmp <= ((uint8_t*)&alarm)[i]))
-			cfg |= ALARM_FLAG_L;
-
-		if((cfg & ALARM_ENABLE_H) && (tmp >= ((uint8_t*)&alarm)[i + 1]))
-			cfg |= ALARM_FLAG_H;
-
-	    ((uint16_t*)&cfg)[i / 2] = cfg;
-	}
+static void
+owslave_end_busy() {
+	cbi(DDRB, OWSLAVE_IOPIN);
+	cbi(TIMSK0, OCIE0A);
+}
+#else
+#define owslave_begin_busy()    do {} while(0)
+#define owslave_end_busy()  do {} while(0)
 #endif
+
+static uint8_t
+owslave_cb_alarm_condition() {
+	return (value.raw>cfg.alarm_high) || (value.raw<cfg.alarm_low);
 }
 
 // This is the general capacitance-reading function.
-uint16_t
+static uint16_t
 moist_calc() {
 	uint16_t v;
 
@@ -309,9 +276,9 @@ again:
 	return v;
 }
 
-void
-convert_voltage() {
 #if SUPPORT_VOLTAGE_READING
+static void
+convert_voltage() {
 #if defined(__AVR_ATtiny13__) || defined (__AVR_ATtiny13A__)
 	// Vref=Vcc, Input=PORTB2
 	ADMUX = _BV(MUX0);
@@ -332,13 +299,13 @@ convert_voltage() {
 	loop_until_bit_is_clear(ADCSRA, ADSC);
 
 	value.voltage = ADC;
-#endif // SUPPORT_VOLTAGE_READING
 }
+#endif // SUPPORT_VOLTAGE_READING
 
-void
-convert_temp() {
 #if EMULATE_DS18B20
-	uint16_t temp = 0;
+static void
+convert_temp() {
+	int32_t temp = 0;
 
 	ADMUX = _BV(REFS1) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1) | _BV(MUX0);
 
@@ -346,38 +313,45 @@ convert_temp() {
 	sbi(ADCSRA, ADSC);
 	loop_until_bit_is_clear(ADCSRA, ADSC);
 
-	for(int i = 0; i < (1 << (4 + EXTRA_TEMP_RESOLUTION)); i++) {
+	for(uint16_t i = (1 << (4 + (cfg.flags&TEMP_RESOLUTION_MASK))); i; --i) {
 		sbi(ADCSRA, ADSC);
 		loop_until_bit_is_clear(ADCSRA, ADSC);
 		temp += ADC - 270 + calib.temp_offset;
 	}
-	temp >>= EXTRA_TEMP_RESOLUTION;
+	temp >>= (cfg.flags&TEMP_RESOLUTION_MASK);
 
 	value.temp = temp;
+}
 #endif
+
+static uint16_t
+read_moisture() {
+	uint16_t ret = 0;
+
+	for(uint8_t i = 1 << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK); i; --i)
+		ret += moist_calc();
+
+	return ret;
 }
 
-void
+static void
 convert_moisture() {
 	uint16_t value_a = 0;
 
-	for(uint8_t i = calib.samplecount; i; --i)
-		value_a += moist_calc();
+	value_a = read_moisture();
 
 #if DO_MEDIAN_FILTERING
 	{
-		uint16_t value_b = 0;
-		uint16_t value_c = 0;
+		uint16_t value_b;
+		uint16_t value_c;
 
 		_delay_ms(1);
 
-		for(uint8_t i = calib.samplecount; i; --i)
-			value_b += moist_calc();
+		value_b = read_moisture();
 
 		_delay_ms(1);
 
-		for(uint8_t i = calib.samplecount; i; --i)
-			value_c += moist_calc();
+		value_c = read_moisture();
 
 		value_a = median_uint16(value_a, value_b, value_c);
 	}
@@ -388,14 +362,14 @@ convert_moisture() {
 #if DO_CALIBRATION
 	// Apply calibration
 	{
-		uint16_t tmp = calib.offset * calib.samplecount;
+		uint16_t tmp = calib.offset << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK);
 		if(value_a >= tmp)
-			value_a -= calib.offset * calib.samplecount;
+			value_a -= tmp;
 		else
 			value_a = 0;
 
-		value_a = ((uint32_t)value_a * (1<<CALIBRATED_BITS))
-			/ ((uint32_t)calib.range * calib.samplecount);
+		value_a = ((uint32_t)value_a << CALIBRATED_BITS)
+			/ ((uint32_t)calib.range << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK));
 
 		if(value_a > (1<<CALIBRATED_BITS)-1)
 			value_a = (1<<CALIBRATED_BITS)-1;
@@ -406,46 +380,62 @@ convert_moisture() {
 #endif
 }
 
-void
+static void
 owslave_cb_convert() {
 	owslave_begin_busy();
 
+#if !DEVICE_IS_SPACE_CONSTRAINED
 	// Set all values to OxFFFF
-//#if !DEVICE_IS_SPACE_CONSTRAINED
-	for(uint8_t i=8;i--;)
+	uint8_t i=7;
+	do {
 		((uint8_t*)&value)[i]=0xFF;
-//#endif
+	} while(i--);
+#endif
 
-	convert_voltage();
-	convert_temp();
 	convert_moisture();
+#if SUPPORT_VOLTAGE_READING
+	convert_voltage();
+#endif
 
-	update_alarm_flags();
+#if EMULATE_DS18B20
+	convert_temp();
+#endif
 
 	owslave_end_busy();
 }
 
-void
+static void
 owslave_cb_recall() {
 	eeprom_busy_wait();
-	eeprom_read_block(&cfg, &cfg_eeprom, sizeof(cfg_eeprom) +
-		sizeof(alarm_eeprom) + sizeof(calib_eeprom));
+	eeprom_read_block(
+		&cfg,
+		&cfg_eeprom,
+		sizeof(cfg_eeprom) + sizeof(calib_eeprom)
+	);
 }
 
-void
+static void
 owslave_cb_commit() {
-	eeprom_update_block(&cfg, &cfg_eeprom, sizeof(cfg_eeprom) +
-		sizeof(alarm_eeprom) + sizeof(calib_eeprom));
+	cli();
+	eeprom_update_block(
+		&cfg,
+		&cfg_eeprom,
+		sizeof(cfg_eeprom) + sizeof(calib_eeprom)
+	);
+#if ENABLE_WATCHDOG
+	wdt_reset();
+#endif
 	eeprom_busy_wait();
+	sei();
 }
 
 // ----------------------------------------------------------------------------
 #pragma mark -
 #pragma mark OWSlave Functions
 
-uint8_t
+static uint8_t
 owslave_read_bit() {
-	// Wait for the bus to go idle.
+	// Wait for the bus to go idle if it is already low.
 	if(bit_is_clear(PINB, OWSLAVE_IOPIN))
 		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
 
@@ -459,7 +449,7 @@ owslave_read_bit() {
 	return bit_is_set(PINB, OWSLAVE_IOPIN);
 }
 
-void
+static void
 owslave_write_bit(uint8_t v) {
 	// Wait for the bus to go idle.
 	if(bit_is_clear(PINB, OWSLAVE_IOPIN))
@@ -489,7 +479,7 @@ owslave_write_bit(uint8_t v) {
 	}
 }
 
-uint8_t
+static uint8_t
 owslave_read_byte() {
 	// We really DON'T need to initialize this. Honest.
 	uint8_t ret;
@@ -502,12 +492,7 @@ owslave_read_byte() {
 	return ret;
 }
 
-inline uint16_t
-owslave_read_word() {
-	return owslave_read_byte() + (owslave_read_byte() << 8);
-}
-
-void
+static void
 owslave_write_byte(uint8_t byte) {
 	for(uint8_t i = 0; i != 8; i++) {
 		owslave_write_bit(byte & 1);
@@ -515,23 +500,22 @@ owslave_write_byte(uint8_t byte) {
 	}
 }
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-void
-owslave_begin_busy() {
-	sbi(TIMSK0, OCIE0A);
+static inline uint16_t
+owslave_read_word() {
+	return owslave_read_byte() + (owslave_read_byte() << 8);
 }
 
-void
-owslave_end_busy() {
-	cbi(DDRB, OWSLAVE_IOPIN);
-	cbi(TIMSK0, OCIE0A);
+static inline void
+owslave_write_word(uint16_t x) {
+	owslave_write_byte(x);
+	owslave_write_byte(x>>8);
 }
-#endif
 
-extern void __init(void) __attribute__ ((naked)) __attribute__ ((section (".init0")));;
+// These next three lines help clean out some,
+// but not all, of the C boilerplate cruft. This
+// saves a few dozen bytes without affecting behavior.
 extern void __do_clear_bss(void) __attribute__ ((naked));
 extern void main (void) __attribute__ ((naked)) __attribute__ ((section (".init8")));
-
 void __do_clear_bss() { }
 
 void
@@ -539,7 +523,8 @@ main(void) {
 	uint8_t cmd;
 	uint8_t flags;
 
-	TCCR0B = 0; // Stop the timer.
+	// Stop the timer, if it happens to be running.
+	TCCR0B = 0;
 
 	// Initialize the IOPin
 	cbi(PORTB, OWSLAVE_IOPIN);
@@ -572,7 +557,9 @@ main(void) {
 	// Check to see if this was a hard or soft reset.
 	if(MCUSR) {
 		// Hard reset. No presence pulse.
+#if ENABLE_WATCHDOG
 		wdt_disable();
+#endif
 		owslave_cb_recall();
 		MCUSR = 0;
 
@@ -594,10 +581,10 @@ main(void) {
 	wdt_reset();
 #endif
 
-	// Let the bus idle for 20µSec
+	// Let the bus idle for 20µSec after the end of the reset pulse.
 	_delay_us(20);
 
-	// Send the 80µSec presence pulse
+	// Send the 80µSec presence pulse.
 	sbi(DDRB, OWSLAVE_IOPIN);
 	_delay_us(80);
 	cbi(DDRB, OWSLAVE_IOPIN);
@@ -617,9 +604,8 @@ main(void) {
 	    )
 	)
 		flags = _BV(0) | _BV(1) | _BV(2);
-	else if(cmd == OWSLAVE_ROMCMD_SKIP)
-		flags = 0;
-	else goto wait_for_reset;
+	else if(cmd != OWSLAVE_ROMCMD_SKIP)
+		goto wait_for_reset;
 
 	// Perfom the ROM command.
 	if(flags) {
@@ -648,7 +634,7 @@ main(void) {
 
 #if SUPPORT_DEVICE_NAMING
 	if(cmd == OWSLAVE_FUNCCMD_RD_NAME) {
-		for(uint8_t i = 0; i < sizeof(device_name); i++) {
+		for(uint8_t i = 0; i != (uint8_t)sizeof(device_name); i++) {
 			owslave_write_byte(eeprom_read_byte(&device_name[i]));
 		}
 		owslave_write_byte(0x00);
@@ -657,27 +643,37 @@ main(void) {
 	if((cmd == OWSLAVE_FUNCCMD_RD_MEM)
 	    || (cmd == OWSLAVE_FUNCCMD_WR_MEM)
 	) {
+		// Initialize the CRC by shifting in the command.
 		uint16_t crc = _crc16_update(0, cmd);
-		uint8_t i = owslave_read_byte() & 31;
-		owslave_read_byte();
+		
+		// Read in the requested byte address and update the CRC.
+		uint8_t i = owslave_read_byte();
 		crc = _crc16_update(crc, i);
+		owslave_read_byte();
 		crc = _crc16_update(crc, 0);
+
 		do {
 			uint8_t byte;
+
 			if(cmd == OWSLAVE_FUNCCMD_RD_MEM) {
+				// Send the byte to the OW master.
 				byte = ((uint8_t*)&value)[i++];
 				owslave_write_byte(byte);
 			} else {
+				// receive the byte from the OW master.
 				byte = owslave_read_byte();
-				    ((uint8_t*)&value)[i++] = byte;
+			    ((uint8_t*)&value)[i++] = byte;
 			}
+			
+			// Update the CRC.
 			crc = _crc16_update(crc, byte);
+
+			// Write out the CRC at every 8-byte page boundry.
 			if((i & 7) == 0) {
-				owslave_write_byte(crc);
-				owslave_write_byte(crc >> 8);
+				owslave_write_word(crc);
 				crc = 0;
 			}
-		} while(i < 32);
+		} while(i < 24);
 	} else if(cmd == OWSLAVE_FUNCCMD_CONVERT) {
 		owslave_read_byte();    // Ignore input select mask
 		owslave_read_byte();    // Ignore read-out control

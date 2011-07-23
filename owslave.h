@@ -65,24 +65,5 @@ extern owslave_addr_t owslave_addr EEMEM;
 
 extern void owslave_main();
 
-// You need to define these functions:
-
-extern void owslave_cb_convert();
-extern uint8_t* owslave_cb_get_scratch_ptr();
-extern uint8_t owslave_cb_read_byte(uint16_t i);
-extern void owslave_cb_write_byte(
-	uint16_t i, uint8_t byte);
-extern bool owslave_cb_alarm_condition();
-extern void owslave_cb_recall();
-extern void owslave_cb_commit();
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-extern void owslave_begin_busy();
-extern void owslave_end_busy();
-#else
-#define owslave_begin_busy()    do {} while(0)
-#define owslave_end_busy()  do {} while(0)
-#endif
-
-
 
 #endif
