@@ -1,52 +1,163 @@
-Protocol
+# Soil Moisture Sensor Protocol Documentation #
 
-** NOTE: THIS IS ALL CURRENTLY IN FLUX. THIS DOCUMENTATION
-** MAY NOT REFLECT THE ACTUAL PROTOCOL IMPLEMENTED IN
-** THE SOURCE CODE. THIS WILL BE FIXED BEFORE THE OFFICIAL RELEASE.
+NOTE: THIS IS ALL CURRENTLY IN FLUX. THIS DOCUMENTATION MAY NOT REFLECT THE
+ACTUAL PROTOCOL IMPLEMENTED IN THE SOURCE CODE. THIS WILL BE FIXED BEFORE THE
+OFFICIAL RELEASE.
 
-This sensor uses the 1-wire slave protocol. It supports the following ROM funcitons:
+This sensor uses the 1-wire slave protocol. This protocol is widely documented.
+See the 1-Wire/iButton Standard (referenced at the end of this document) for
+more information.
 
-	0x33 READROM
-	0x55 MATCHROM
-	0xCC SKIPROM
-	0xF0 SEARCH
-	0xEC ALARMSEARCH
+## Patent Notice ##
 
-It supports the following funciton commands:
+The 1-wire protocol is patented: USPAT#6,108,751
 
-DS18B20 Compatibility: (Temperature only)
-	0x44 CONVERT_T
-	0xBE RD_SCRATCH
+You will need to obtain a license for the 1-wire protocol if you plan to
+construct any significant number of these devices, otherwise MAXIM will come
+knocking at your door with angry lawyers.
 
-Name access:	(For storing the name of the sensor as a UTF-8 string)
-	0xF1 RD_NAME
-	0xF2 WR_NAME
+## ROM Commands ##
 
-Sensor access: (DS2450 compatible)
-	0x3C CONVERT
-	0xAA RD_MEM
-	0x55 WR_MEM
-	0x48 COMMIT_MEM
-	0xB8 RECALL_MEM
+This device supports the following ROM funcitons:
 
+ * `0x33` READROM
+ * `0x55` MATCHROM
+ * `0xCC` SKIPROM
+ * `0xF0` SEARCH
+ * `0xEC` ALARMSEARCH
 
-Channel A is normalized moisture level. Alarms are supported on this channel.
-Channel B is raw capacitive reading. Alarms are *NOT* supported on this channel.
-Channel C is raw temperature reading. Alarms are *NOT* supported on this channel.
-Channel D is raw voltage reading. Alarms are *NOT* supported on this channel.
+Overdrive commands are not (yet?) supported.
 
-Memory Map Page 3:
-	0x18:	C_range
-	0x19:	C_offset
-	0x1A:	C_samplecount
-	0x1B:	Not currently used. Write as 0x00.
-	0x1C:	Write as 0x40
-	0x1D:	temp_offset
-	0x1E:	Not currently used. Write as 0x00.
-	0x1F:	Not currently used. Write as 0x00.
+## Function Commands ##
+
+This device supports the following funciton commands:
+
+ * `0xAA` READMEM
+ * `0x55` WRITEMEM
+ * `0x48` COMMITMEM
+ * `0xB8` RECALLMEM
+ * `0x3C` CONVERT
+ * `0x44` CONVERT_T
+ * `0xBE` RD_SCRATCH (Only when built with DS18B20 compatibility mode)
+
+### READMEM and WRITEMEM ###
+
+READMEM and WRITEMEM work similar to how they work on other 1-wire or
+iButton devices: each takes a two-byte start address and then either
+reads out or reads in bytes to be read or written respectively. At each
+eight-byte page boundary, a 16-bit CRC is returned from the device.
+
+See the datasheet for the DS2450 for more information on how to use READMEM
+and WRITEMEM. See the "Memory Map" section below for an explanation of the
+data structures.
+
+### COMMITMEM and RECALLMEM ###
+
+The values contained in the later two pages of memory (0x08-0x17) are loaded
+from EEPROM when the device is first powered up. If you modify values at these
+locations using the WRITEMEM command, you will lose your changes the next time
+the device power-cycles unless you issue a COMMITMEM command. The COMMITMEM
+command will save the contents of the later two pages to EEPROM so that the
+values will persist across power cycles.
+
+The RECALLMEM command will cause the device to revert any changes made to the
+last two pages by updating them with the current values stored in EEPROM,
+similar to what happens when the device is first powered up.
+
+### CONVERT and CONVERT_T ###
+
+The CONVERT and CONVERT_T commands are used to initiate the sensor's sampling
+process. Upon completion, the value of the sensor's readings can be retrieved
+from the first page (0x00-0x07) of memory using the READMEMORY command.
+
+There is only one difference between the two commands: CONVERT_T begins the
+conversion process immediately after the last bit of the command is sent,
+whereas the CONVERT command expects two bytes (the values of which are ignored)
+before the conversion process begins.
+
+The device will be busy while the conversion is taking place---issuing a
+1-wire reset on the bus will interrupt the conversion process. The status
+of the conversion may be polled by sending read time slots. While the device
+is busy converting, a read time slot will return '0'. When it is finished,
+it will return '1'.
+
+The CONVERT command is compatible with DS2450-type parts, and the CONVERT_T is
+compatible with DS18B20-type parts.
+
+### RD_SCRATCH ###
+
+This command allows the device to behave like a DS18B20 temperature sensor.
+It is only available on hardware that has built-in temperature sensors and when
+the firmware has been built with DS18B20 emulation enabled.
+
+The only fields with valid values are the temperature field and the CRC field.
+All other bytes should be ignored. The WR_SCRATCH command is not supported.
+
+See the DS18B20 datasheet for more information.
+
+## Memory Map ##
+
+Below is the memory map of the device, accessable via the READMEM and WRITEMEM
+commands.
+
+### Page 0 - Sensor Values ###
+
+ * `0x00` MOISTURE_L
+ * `0x01` MOISTURE_H
+ * `0x02` RAW_L
+ * `0x03` RAW_H
+ * `0x04` TEMPERATURE_L
+ * `0x05` TEMPERATURE_H
+ * `0x06` VOLTAGE_L
+ * `0x07` VOLTAGE_H
+
+MOISTURE_L and MOISTURE_H are the respective low and high bytes of the moisture
+value. This value is calculated directly from the value of the RAW field and
+the calibration data from page 2. The value ranges from 0x0000 (Most dry) to
+0xFFFF (Most wet).
+
+RAW_L and RAW_H are the respective low and high bytes of the raw capacitance
+reading of the soil.
+
+TEMPERATURE_L and TEMPERATURE_H are the respective low and high bytes of the
+measured temperature. The value of this field is encoded in a format compatible
+with the DS18B20 temperature reading. See the DS18B20 datasheet for more
+details.
+
+VOLTAGE_L and VOLTAGE_H are the respective low and high bytes of the
+measured voltage. This value may be converted to the actual voltage using the
+following formula:
+
+    VCC = 1024.0*1.1/(VOLTAGE_L+(VOLTAGE_H<<8))
+
+### Page 1 - Device Configuration ###
+
+ * `0x08` ALARM_LOW
+ * `0x09` ALARM_HIGH
+ * `0x0A` CFG_FLAGS
+ * `0x0B` *Reserved*
+ * `0x0C` *Reserved*
+ * `0x0D` *Reserved*
+ * `0x0E` *Reserved*
+ * `0x0F` *Reserved*
+
+### Page 2 - Device Calibration ###
+
+ * `0x10` CALIB_RAW_RANGE
+ * `0x11` CALIB_RAW_OFFSET
+ * `0x12` CALIB_FLAGS
+ * `0x13` CALIB_TEMPERATURE_OFFSET
+ * `0x14` *Reserved*
+ * `0x15` *Reserved*
+ * `0x16` *Reserved*
+ * `0x17` *Reserved*
 
 See notes.txt for more information on calibration values.
 
-Unlike a real DS2450, this devie will be busy while converting. Send read
-slots to determine when it is finished---will read '1' when done.
+## References ##
 
+ * [1-Wire Wikipedia Page](http://en.wikipedia.org/wiki/1-Wire)
+ * [1-Wire/iButton Standard](http://www.maxim-ic.com/products/ibutton/ibuttons/standard.pdf)
+ * [DS18B20 Datasheet](http://datasheets.maxim-ic.com/en/ds/DS18B20.pdf)
+ * [DS2450 Datasheet](http://datasheets.maxim-ic.com/en/ds/DS2450.pdf)
+ * [USPAT#6,108,751](http://patimg1.uspto.gov/.piw?Docid=06108751&idkey=NONE)

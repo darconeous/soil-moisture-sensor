@@ -27,8 +27,6 @@ CFLAGS += -std=c99
 CFLAGS += -fpack-struct
 CFLAGS += -fshort-enums
 CFLAGS += -gdwarf-2
-#CFLAGS += -mcall-prologues
-#CFLAGS += -mint8
 
 AVRDUDEFLAGS += -y
 AVRDUDEFLAGS += -c dragon_dw
@@ -44,6 +42,7 @@ all: main.hex main.eep main.lss main.size
 
 clean:
 	$(RM) main.o main.elf main.hex main.eep main.lss
+	$(RM) *.unc-backup*
 	$(RM) eagle/soil-moisture-sensor.cmp
 	$(RM) eagle/soil-moisture-sensor.drd
 	$(RM) eagle/soil-moisture-sensor.dri
@@ -58,6 +57,9 @@ clean:
 hex: main.hex
 hex-eeprom: main.eep
 burn: main.burn
+
+uncrustify:
+	uncrustify -c .uncrustify.cfg --replace *.c
 
 burn-eeprom:
 	./gen-eeprom-hex.sh | $(AVRDUDE) $(AVRDUDEFLAGS) -U eeprom:w:-:i
@@ -85,5 +87,5 @@ burn-eeprom:
 	$(OBJCOPY) -O ihex -j .eeprom $< $@
 
 main.elf: main.o
-main.o: main.c owslave.h Makefile
+main.o: main.c Makefile
 

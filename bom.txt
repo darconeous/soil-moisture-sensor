@@ -8,15 +8,15 @@ Cost@Mass:  USD$0.54
 Source:     http://www.goldphoenixpcb.biz/
 Source:     http://batchpcb.com/
 
-Desc:       ATtiny25V-10S (EIAJ, "Wide" SOIC)
+Desc:       ATtiny25-10S (EIAJ, "Wide" SOIC)
 PartNames:	IC1
 Count:      1
 Cost@1x:    USD$1.80
 Cost@25x:   USD$1.10
 Cost@Mass:  USD$1.08
-Source:     http://www.mouser.com/Search/Refine.aspx?Keyword=ATTINY25V-10S
-Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=ATtiny25V-10S
-AltParts:	ATtiny25-10S
+Source:     http://www.mouser.com/Search/Refine.aspx?Keyword=ATTINY25-10S
+Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=ATtiny25-10S
+AltParts:	ATtiny25V-10S
 
 Desc:       0805 or 0603 1µF Capacitor X7R
 PartNames:	C1, C2
@@ -78,8 +78,8 @@ Board-mount:
     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A32934-ND
 
 Housing:
-    http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A25849-ND
     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A25848-ND
+    http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A25849-ND
     
 Crimp-pins for housing:
     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=A25959

@@ -12,14 +12,14 @@
 
 #define EXTRA_TEMP_RESOLUTION           4
 
-#define CALIBRATED_BITS		10
+#define CALIBRATED_BITS					10
 
 #ifndef MOIST_DRIVE_PIN
-#define MOIST_DRIVE_PIN             4
+#define MOIST_DRIVE_PIN					4
 #endif
 
 #ifndef OWSLAVE_IOPIN
-#define OWSLAVE_IOPIN   (0)
+#define OWSLAVE_IOPIN					(0)
 #endif
 
 #ifndef MOIST_COLLECTOR_PIN
@@ -51,7 +51,7 @@
 #endif
 
 #ifndef ENABLE_WATCHDOG
-#define ENABLE_WATCHDOG			!DEVICE_IS_SPACE_CONSTRAINED
+#define ENABLE_WATCHDOG         !DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
 #ifndef SUPPORT_VOLTAGE_READING
@@ -69,8 +69,6 @@
 #ifndef DO_CALIBRATION
 #define DO_CALIBRATION          !DEVICE_IS_SPACE_CONSTRAINED
 #endif
-
-#include "owslave.h"
 
 // ----------------------------------------------------------------------------
 
@@ -100,10 +98,69 @@
 #endif
 #endif
 
-#define TEMP_RESOLUTION_MAX					(0x7)
+#define TEMP_RESOLUTION_MAX                 (0x7)
 
-#define TEMP_RESOLUTION_MASK				(0x7)
-#define OVERSAMPLE_COUNT_EXPONENT_MASK		(0xF)
+#define TEMP_RESOLUTION_MASK                (0x7)
+#define OVERSAMPLE_COUNT_EXPONENT_MASK      (0xF)
+
+// ----------------------------------------------------------------------------
+#pragma mark -
+#pragma mark owslave types
+
+typedef uint8_t bool;
+#define true(bool) (1)
+#define false(bool) (0)
+
+#define OWSLAVE_T_X     (20)
+#define OWSLAVE_T_PDH   (20)    // 15-60 uSec
+#define OWSLAVE_T_PDL   (80)    // 60-240 uSec
+
+enum {
+	OWSLAVE_TYPE_CUSTOMFLAG = 0x80,
+
+	OWSLAVE_TYPE_DS2401     = 0x01, // Serial-number only
+	OWSLAVE_TYPE_DS1920     = 0x10,
+	OWSLAVE_TYPE_DS18B20    = 0x28, // Temperature Sensor
+	OWSLAVE_TYPE_DS2450     = 0x20, // 4-channel ADC
+
+	OWSLAVE_TYPE_MOIST      = OWSLAVE_TYPE_DS2450|OWSLAVE_TYPE_CUSTOMFLAG
+};
+
+enum {
+	OWSLAVE_ROMCMD_READ=0x33,           // 00110011b
+	OWSLAVE_ROMCMD_MATCH=0x55,          // 01010101b
+	OWSLAVE_ROMCMD_SKIP=0xCC,           // 11001100b
+	OWSLAVE_ROMCMD_SEARCH=0xF0,         // 11110000b
+	OWSLAVE_ROMCMD_ALARM_SEARCH=0xEC,   // 11101100b
+
+	// DS2450, Quad ADC
+	OWSLAVE_FUNCCMD_RD_MEM=0xAA,
+	OWSLAVE_FUNCCMD_WR_MEM=0x55,
+	OWSLAVE_FUNCCMD_CONVERT=0x3C,
+
+	OWSLAVE_FUNCCMD_COMMIT_MEM=0x48,
+	OWSLAVE_FUNCCMD_RECALL_MEM=0xB8,
+
+	// DS18B20, 1-Wire Thermometer
+	OWSLAVE_FUNCCMD_CONVERT_T=0x44,
+	OWSLAVE_FUNCCMD_WR_SCRATCH=0x4E,
+	OWSLAVE_FUNCCMD_RD_SCRATCH=0xBE,
+	OWSLAVE_FUNCCMD_CP_SCRATCH=0x48,
+	OWSLAVE_FUNCCMD_RECALL_E2=0xB8,
+
+	// Custom
+	OWSLAVE_FUNCCMD_RD_NAME=0xF1,
+	OWSLAVE_FUNCCMD_WR_NAME=0xFE,
+};
+
+typedef union {
+	struct {
+		uint8_t type;
+		uint8_t serial[6];
+		uint8_t crc;
+	} s;
+	uint8_t d[8];
+} owslave_addr_t;
 
 // ----------------------------------------------------------------------------
 #pragma mark -
@@ -119,11 +176,11 @@ struct {
 
 // Page 2 - configuration
 struct cfg_t {
-	uint16_t	alarm_low;
-	uint16_t	alarm_high;
+	uint8_t	alarm_low;
+	uint8_t	alarm_high;
 
-	uint8_t		flags;
-	uint8_t		reserved[3];
+	uint8_t	flags;
+	uint8_t	reserved[5];
 } cfg ATTR_NO_INIT;
 
 // Page 3 - Calibration
@@ -137,7 +194,7 @@ struct calib_t {
 } calib ATTR_NO_INIT;
 
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-//uint8_t was_interrupted ATTR_NO_INIT
+//uint8_t was_interrupted ATTR_NO_INIT;
 register uint8_t was_interrupted __asm__("r3");
 #endif
 
@@ -152,8 +209,8 @@ owslave_addr_t owslave_addr EEMEM = {
 };
 
 struct cfg_t cfg_eeprom EEMEM = {
-	.alarm_low		= 0x0000,
-	.alarm_high		= 0xFFFF,
+	.alarm_low		= 0x00,
+	.alarm_high		= 0xFF,
 	.flags			= 0x00 | (7&TEMP_RESOLUTION_MASK),
 };
 
@@ -214,7 +271,8 @@ owslave_end_busy() {
 
 static uint8_t
 owslave_cb_alarm_condition() {
-	return (value.raw>cfg.alarm_high) || (value.raw<cfg.alarm_low);
+	uint8_t moist_h = (value.moisture>>8);
+	return (moist_h > cfg.alarm_high) || (moist_h < cfg.alarm_low);
 }
 
 // This is the general capacitance-reading function.
@@ -233,7 +291,7 @@ again:
 	sbi(DDRB, MOIST_COLLECTOR_PIN);
 
 	// Wait long enough for the sensing capacitor to fully flush.
-	_delay_us(10);
+	_delay_us(100);
 
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
 	was_interrupted = 0;
@@ -258,7 +316,7 @@ again:
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
 		if(was_interrupted)
 			goto again;
-		_NOP();
+//		_NOP();
 #else
 		_delay_us(1);
 #endif
@@ -328,7 +386,7 @@ static uint16_t
 read_moisture() {
 	uint16_t ret = 0;
 
-	for(uint8_t i = 1 << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK); i; --i)
+	for(int i = (1 << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK)); i; --i)
 		ret += moist_calc();
 
 	return ret;
@@ -345,11 +403,11 @@ convert_moisture() {
 		uint16_t value_b;
 		uint16_t value_c;
 
-		_delay_ms(1);
+		_delay_ms(4);
 
 		value_b = read_moisture();
 
-		_delay_ms(1);
+		_delay_ms(4);
 
 		value_c = read_moisture();
 
@@ -362,22 +420,24 @@ convert_moisture() {
 #if DO_CALIBRATION
 	// Apply calibration
 	{
-		uint16_t tmp = calib.offset << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK);
+		uint16_t tmp = (calib.offset << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK));
+
 		if(value_a >= tmp)
 			value_a -= tmp;
 		else
 			value_a = 0;
 
 		value_a = ((uint32_t)value_a << CALIBRATED_BITS)
-			/ ((uint32_t)calib.range << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK));
+			/ (uint32_t)((uint32_t)calib.range << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK));
 
 		if(value_a > (1<<CALIBRATED_BITS)-1)
 			value_a = (1<<CALIBRATED_BITS)-1;
 
 		value_a <<= 16-CALIBRATED_BITS;
 	}
-	value.moisture = value_a;
 #endif
+
+	value.moisture = value_a;
 }
 
 static void
@@ -386,7 +446,7 @@ owslave_cb_convert() {
 
 #if !DEVICE_IS_SPACE_CONSTRAINED
 	// Set all values to OxFFFF
-	uint8_t i=7;
+	uint8_t i = 7;
 	do {
 		((uint8_t*)&value)[i]=0xFF;
 	} while(i--);
@@ -416,17 +476,15 @@ owslave_cb_recall() {
 
 static void
 owslave_cb_commit() {
-	cli();
+#if ENABLE_WATCHDOG
+	wdt_reset();
+#endif
 	eeprom_update_block(
 		&cfg,
 		&cfg_eeprom,
 		sizeof(cfg_eeprom) + sizeof(calib_eeprom)
 	);
-#if ENABLE_WATCHDOG
-	wdt_reset();
-#endif
 	eeprom_busy_wait();
-	sei();
 }
 
 // ----------------------------------------------------------------------------
@@ -456,6 +514,12 @@ owslave_write_bit(uint8_t v) {
 		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
 
 	if(v == 0) {
+#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+		owslave_begin_busy();
+		loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
+		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
+		owslave_end_busy();
+#else
 		// Disable interrupts, so we can make sure we get the timing right.
 		cli();
 
@@ -473,6 +537,7 @@ owslave_write_bit(uint8_t v) {
 
 		// Turn interrupts back on.
 		sei();
+#endif
 	} else {
 		// Wait for the slot to open.
 		loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
@@ -508,7 +573,7 @@ owslave_read_word() {
 static inline void
 owslave_write_word(uint16_t x) {
 	owslave_write_byte(x);
-	owslave_write_byte(x>>8);
+	owslave_write_byte(x >> 8);
 }
 
 // These next three lines help clean out some,
@@ -557,9 +622,10 @@ main(void) {
 	// Check to see if this was a hard or soft reset.
 	if(MCUSR) {
 		// Hard reset. No presence pulse.
-#if ENABLE_WATCHDOG
+
+		// Always disable the watchdog, even if we don't use it.
 		wdt_disable();
-#endif
+
 		owslave_cb_recall();
 		MCUSR = 0;
 
@@ -645,14 +711,14 @@ main(void) {
 	) {
 		// Initialize the CRC by shifting in the command.
 		uint16_t crc = _crc16_update(0, cmd);
-		
+
 		// Read in the requested byte address and update the CRC.
 		uint8_t i = owslave_read_byte();
 		crc = _crc16_update(crc, i);
 		owslave_read_byte();
 		crc = _crc16_update(crc, 0);
 
-		do {
+		while(i < 23) {
 			uint8_t byte;
 
 			if(cmd == OWSLAVE_FUNCCMD_RD_MEM) {
@@ -664,7 +730,7 @@ main(void) {
 				byte = owslave_read_byte();
 			    ((uint8_t*)&value)[i++] = byte;
 			}
-			
+
 			// Update the CRC.
 			crc = _crc16_update(crc, byte);
 
@@ -673,15 +739,19 @@ main(void) {
 				owslave_write_word(crc);
 				crc = 0;
 			}
-		} while(i < 24);
+		}
 	} else if(cmd == OWSLAVE_FUNCCMD_CONVERT) {
 		owslave_read_byte();    // Ignore input select mask
 		owslave_read_byte();    // Ignore read-out control
 		owslave_cb_convert();
 	} else if(cmd == OWSLAVE_FUNCCMD_COMMIT_MEM) {
+		owslave_begin_busy();
 		owslave_cb_commit();
+		owslave_end_busy();
 	} else if(cmd == OWSLAVE_FUNCCMD_RECALL_MEM) {
+		owslave_begin_busy();
 		owslave_cb_recall();
+		owslave_end_busy();
 	} else if(cmd == OWSLAVE_FUNCCMD_CONVERT_T) {
 		owslave_cb_convert();
 	}

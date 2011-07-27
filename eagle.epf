@@ -1,0 +1,10 @@
+[Eagle]
+Version="05 08 00"
+Platform="Mac OS X"
+Globals="Globals"
+Desktop="Desktop"
+
+[Globals]
+AutoSaveProject=1
+
+[Desktop]
