@@ -139,14 +139,14 @@ following formula:
  * `0x0C` *Reserved*
  * `0x0D` *Reserved*
  * `0x0E` *Reserved*
- * `0x0F` *Reserved*
+ * `0x0F` Firmware Revision
 
 ### Page 2 - Device Calibration ###
 
- * `0x10` CALIB_RAW_RANGE
- * `0x11` CALIB_RAW_OFFSET
+ * `0x10` CALIB_RAW_RANGE (Unsigned)
+ * `0x11` CALIB_RAW_OFFSET (Unsigned)
  * `0x12` CALIB_FLAGS
- * `0x13` CALIB_TEMPERATURE_OFFSET
+ * `0x13` CALIB_TEMPERATURE_OFFSET (Signed)
  * `0x14` *Reserved*
  * `0x15` *Reserved*
  * `0x16` *Reserved*

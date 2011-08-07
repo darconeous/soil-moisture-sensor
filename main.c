@@ -9,17 +9,18 @@
 #include <stdint.h>
 
 #define OLD_SOIL_MOISTURE_SENSOR_BOARD  0
+#define DO_MEDIAN_FILTERING				1
 
-#define EXTRA_TEMP_RESOLUTION           4
+#define FIRMWARE_VERSION				0
 
 #define CALIBRATED_BITS					10
 
-#ifndef MOIST_DRIVE_PIN
-#define MOIST_DRIVE_PIN					4
-#endif
-
 #ifndef OWSLAVE_IOPIN
 #define OWSLAVE_IOPIN					(0)
+#endif
+
+#ifndef MOIST_DRIVE_PIN
+#define MOIST_DRIVE_PIN					4
 #endif
 
 #ifndef MOIST_COLLECTOR_PIN
@@ -180,7 +181,10 @@ struct cfg_t {
 	uint8_t	alarm_high;
 
 	uint8_t	flags;
-	uint8_t	reserved[5];
+	uint8_t	reserved[4];
+
+
+	uint8_t firmware_version;
 } cfg ATTR_NO_INIT;
 
 // Page 3 - Calibration
@@ -291,7 +295,7 @@ again:
 	sbi(DDRB, MOIST_COLLECTOR_PIN);
 
 	// Wait long enough for the sensing capacitor to fully flush.
-	_delay_us(100);
+	_delay_ms(2);
 
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
 	was_interrupted = 0;
@@ -316,7 +320,7 @@ again:
 #if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
 		if(was_interrupted)
 			goto again;
-//		_NOP();
+		_NOP();
 #else
 		_delay_us(1);
 #endif
@@ -374,11 +378,10 @@ convert_temp() {
 	for(uint16_t i = (1 << (4 + (cfg.flags&TEMP_RESOLUTION_MASK))); i; --i) {
 		sbi(ADCSRA, ADSC);
 		loop_until_bit_is_clear(ADCSRA, ADSC);
-		temp += ADC - 270 + calib.temp_offset;
+		temp += ADC - 270;
 	}
 	temp >>= (cfg.flags&TEMP_RESOLUTION_MASK);
-
-	value.temp = temp;
+	value.temp = (uint32_t)7250*(uint32_t)16/value.voltage - 337 + temp + calib.temp_offset*2;
 }
 #endif
 
@@ -452,7 +455,6 @@ owslave_cb_convert() {
 	} while(i--);
 #endif
 
-	convert_moisture();
 #if SUPPORT_VOLTAGE_READING
 	convert_voltage();
 #endif
@@ -460,6 +462,8 @@ owslave_cb_convert() {
 #if EMULATE_DS18B20
 	convert_temp();
 #endif
+
+	convert_moisture();
 
 	owslave_end_busy();
 }
@@ -472,6 +476,7 @@ owslave_cb_recall() {
 		&cfg_eeprom,
 		sizeof(cfg_eeprom) + sizeof(calib_eeprom)
 	);
+	cfg.firmware_version = FIRMWARE_VERSION;
 }
 
 static void
