@@ -4,8 +4,6 @@ measured_none: Measured value for sensor suspended in open air at 20°C, 5v.
 measured_full: Measured value when sensing element is fully submerged
                in salt water at 20°C, 5v.
 max_value: Target value for maximum reading.
-Vih: Minimum voltage for a I/O line to read as 'HIGH'. This value is
-     approx 0.7 volts.
 Vint: internal voltage refence
 Vod:	(Vcc-Voh), voltage drop for an I/O pin driven high
 env_factor:	Compensation for voltage and temperature.
@@ -25,8 +23,72 @@ two reasons:
 
 	* Ice doesn't conduct electricity, so readings should start to
 	  quickly decrease below ~4°C.
-	* The capacity of the holding capacitor will increase at colder
-	  temps, and decrease at higher temps. This behavior is the inverse
-	  of the ice issue above.
+	* The capacity of the holding capacitor will change as the temperature
+	  changes.
 
 TODO: Figure out the temperature compensation.
+
+## Construction notes ##
+
+One of the most important parts of building these sensors is making sure that
+the sensing electrodes are FULLY insulated from the soil/moisture/liquid/etc.
+This is the number one reason for bad readings. Keep in mind that even materials
+which you would normally think of as water-impermiable actually do absorb some
+measureable amount of water, such as Plasti-Dip. Yep, that's right, as cool
+as plasti-dip is, if you use it your readings will not be as accurate as they
+could be.
+
+The ideal insulator for the electrodes would be a thin layer of glass. This
+isn't really feasible when using PCBs, so we need something else.
+
+I'm currently experimenting with different insulators now, including epoxy,
+enamel, variations on plast-dip(I got to try...), etc. I'll be documenting
+which ones work the best here in the future. So far it looks like heavy-duty
+industrial enamel paint or epoxy is the way to go.
+
+From what I've been able to determine so far, you want the finish of your
+insulator to be *shiny*. If your insulator has a matte look to it, that means
+that water will tend to adhere longer to it than it otherwise would. Also avoid
+anything rubbery, as that can absorb water/oil/etc., which will (you guessed it)
+throw off your readings.
+
+
+----
+
+I've been using [Rustoleum High-Performance Enamel Spray]
+(http://www.rustoleum.com/CBGProduct.asp?pid=95) (RHPES), and while initial indications
+seemed positive, I am noticing my moisture readings increase significantly after
+prolonged exposure to water. While I don't have a conclusive explanation for
+why this might be happening, my current hypothesis is that the enamel is
+actually absorbing some water which is either changing its electrical
+conductivity and/or changing its dielectric constant. I will do more testing
+do see if these properties improve with extended drying times.
+
+I partially submerged (about half-way) a sensor that had a coating of RHPES in
+a glass of water. The RHPES had been applied 24-48 hours prior. I removed the
+sensor after around 12-18 hours and I could visually see changes in the paint
+at the water line---confirming that water had indeed been absorbed into the
+enamel. Additionally the zero capacitance offset increased by one level, further
+indicating absorbtion of water into the coating.
+
+It is entirely possible that this is less pronounced after extended
+drying periods, so more testing is needed. But it doesn't look good at this
+point for RHPES.
+
+Other options:
+
+ *	[RustOleum High-Performance Protective Enamel]
+	(http://www.rustoleum.com/CBGProduct.asp?pid=130)
+ *	[Parks Super-Glaze](http://www.rustoleum.com/CBGProduct.asp?pid=448)
+
+----
+
+While the sensor can run at 3.3 volts, the moisture precision will be less than
+what is achievable at 5 volts. For best performance, run at 5 volts.
+
+----
+
+One mistake I made was to add lots of vias thruought the electrodes---with the
+goal being to make sure both sides acted like the same electrode. This was a
+bad idea because I would need to then fill the vias manually after the fact
+to make sure that they don't let water seep in and start conducting.
