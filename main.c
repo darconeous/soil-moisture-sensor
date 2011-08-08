@@ -219,9 +219,9 @@ struct cfg_t cfg_eeprom EEMEM = {
 };
 
 struct calib_t calib_eeprom EEMEM = {
-	.range			= (95 - 8),
-	.offset			= (8),
-	.flags			= 0x7,
+	.range			= (0x69),
+	.offset			= (0x11),
+	.flags			= 0x6,
 	.temp_offset	= 0,
 };
 
