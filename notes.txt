@@ -69,7 +69,8 @@ a glass of water. The RHPES had been applied 24-48 hours prior. I removed the
 sensor after around 12-18 hours and I could visually see changes in the paint
 at the water line---confirming that water had indeed been absorbed into the
 enamel. Additionally the zero capacitance offset increased by one level, further
-indicating absorbtion of water into the coating.
+indicating absorbtion of water into the coating. This offset disappeared after
+around 20 minutes.
 
 It is entirely possible that this is less pronounced after extended
 drying periods, so more testing is needed. But it doesn't look good at this
@@ -80,6 +81,8 @@ Other options:
  *	[RustOleum High-Performance Protective Enamel]
 	(http://www.rustoleum.com/CBGProduct.asp?pid=130)
  *	[Parks Super-Glaze](http://www.rustoleum.com/CBGProduct.asp?pid=448)
+ *	[TAP General-Purpose Epoxy](http://www.tapplastics.com/shop/product.php?pid=28)
+ *	[TAP Super-Hard Epoxy](http://www.tapplastics.com/shop/product.php?pid=29)
 
 ----
 
@@ -91,4 +94,9 @@ what is achievable at 5 volts. For best performance, run at 5 volts.
 One mistake I made was to add lots of vias thruought the electrodes---with the
 goal being to make sure both sides acted like the same electrode. This was a
 bad idea because I would need to then fill the vias manually after the fact
-to make sure that they don't let water seep in and start conducting.
+to make sure that they don't let water seep in and start conducting. This has
+turned out to be a major pain. The design has already been updated to not
+have so many vias, but that doesn't fix the 40+ boards I already have.
+
+
+

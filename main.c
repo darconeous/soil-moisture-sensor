@@ -1,95 +1,125 @@
+/*	@title Capacitive Soil Moisture Sensor
+**
+**	@author Robert Quattlebaum <darco@deepdarc.com>
+**
+**	See http://www.deepdarc.com/soil-moisture-sensor/ for more information.
+**
+**	@legal
+**	Copyright (c) 2011 Robert S. Quattlebaum. All Rights Reserved.
+**
+**	This package is free software; you can redistribute it and/or
+**	modify it under the terms of the GNU General Public License as
+**	published by the Free Software Foundation; either version 2 of
+**	the License, or (at your option) any later version.
+**
+**	This package is distributed in the hope that it will be useful,
+**	but WITHOUT ANY WARRANTY; without even the implied warranty of
+**	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+**	General Public License for more details.
+**	@endlegal
+*/
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <avr/io.h>
 #include <avr/eeprom.h>
 #include <avr/interrupt.h>
-#include <stdlib.h>
-#include <string.h>
 #include <avr/wdt.h>
 #include <avr/cpufunc.h>
+#include <avr/sleep.h>
+
 #include <util/delay.h>
-#include <stdint.h>
+#include <util/crc16.h>
 
-#define OLD_SOIL_MOISTURE_SENSOR_BOARD  0
-#define DO_MEDIAN_FILTERING				1
+// ----------------------------------------------------------------------------
+#pragma mark Build Settings
 
-#define FIRMWARE_VERSION				0
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION			(0)
+#endif
 
-#define CALIBRATED_BITS					10
+#ifndef CALIBRATED_BITS
+#define CALIBRATED_BITS				(10)
+#endif
 
 #ifndef OWSLAVE_IOPIN
-#define OWSLAVE_IOPIN					(0)
+#define OWSLAVE_IOPIN				(0)		//!< PB0
 #endif
 
 #ifndef MOIST_DRIVE_PIN
-#define MOIST_DRIVE_PIN					4
+#define MOIST_DRIVE_PIN				(4)		//!< PB4
 #endif
 
 #ifndef MOIST_COLLECTOR_PIN
-#if OLD_SOIL_MOISTURE_SENSOR_BOARD
-#define MOIST_COLLECTOR_PIN         2
-#else
-#define MOIST_COLLECTOR_PIN         3
-#endif
+#define MOIST_COLLECTOR_PIN         (3)		//!< PB3
 #endif
 
 #ifndef MOIST_FULLY_DRIVE_PULSES
-#if OLD_SOIL_MOISTURE_SENSOR_BOARD
-#define MOIST_FULLY_DRIVE_PULSES    0
-#else
-#define MOIST_FULLY_DRIVE_PULSES    1
+#define MOIST_FULLY_DRIVE_PULSES    (1)
 #endif
+
+#ifndef SUPPORT_DEVICE_NAMING
+#define SUPPORT_DEVICE_NAMING		(0)		//!< Not yet implemented.
+#endif
+
+#ifndef TEMP_VOLTAGE_COMP_NUMERATOR
+#define TEMP_VOLTAGE_COMP_NUMERATOR	((uint32_t)7250*16)
+#endif
+
+#ifndef TEMP_VOLTAGE_COMP_OFFSET
+#define TEMP_VOLTAGE_COMP_OFFSET	(337)
 #endif
 
 #ifndef DEVICE_IS_SPACE_CONSTRAINED
 #define DEVICE_IS_SPACE_CONSTRAINED (FLASHEND <= 0x3FF)
 #endif
 
-#ifndef OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-#define OWSLAVE_SUPPORTS_CONVERT_INDICATOR 1
+#ifndef SUPPORT_CONVERT_INDICATOR
+#define SUPPORT_CONVERT_INDICATOR	(1)
 #endif
 
-#ifndef SUPPORT_DEVICE_NAMING
-#define SUPPORT_DEVICE_NAMING   0
+#ifndef USE_WATCHDOG
+#define USE_WATCHDOG				!DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
-#ifndef ENABLE_WATCHDOG
-#define ENABLE_WATCHDOG         !DEVICE_IS_SPACE_CONSTRAINED
+#ifndef SUPPORT_VOLT_READING
+#define SUPPORT_VOLT_READING		!DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
-#ifndef SUPPORT_VOLTAGE_READING
-#define SUPPORT_VOLTAGE_READING !DEVICE_IS_SPACE_CONSTRAINED
+#ifndef SUPPORT_TEMP_READING
+#define SUPPORT_TEMP_READING		!DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
 #ifndef EMULATE_DS18B20
-#define EMULATE_DS18B20         !DEVICE_IS_SPACE_CONSTRAINED
+#define EMULATE_DS18B20				!DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
 #ifndef DO_MEDIAN_FILTERING
-#define DO_MEDIAN_FILTERING     !DEVICE_IS_SPACE_CONSTRAINED
+#define DO_MEDIAN_FILTERING			!DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
 #ifndef DO_CALIBRATION
-#define DO_CALIBRATION          !DEVICE_IS_SPACE_CONSTRAINED
+#define DO_CALIBRATION				!DEVICE_IS_SPACE_CONSTRAINED
 #endif
 
 // ----------------------------------------------------------------------------
+#pragma mark -
+#pragma mark Helper Macros
 
 #define MOIST_MAX_VALUE \
         (const uint16_t)((1l << \
                 (sizeof(uint16_t) * 8l)) - 1)
 
-#define sbi(x, y)    x |= (uint8_t)(1 << y)
-#define cbi(x, y)    x &= (uint8_t) ~(1 << y)
-
-#define ATTR_NO_INIT   __attribute__ ((section(".noinit")))
-
 #if !defined(TIMSK0) && defined(TIMSK)
 #define TIMSK0 TIMSK
 #endif
 
-#include <util/crc16.h>
-#define _crc_ibutton_update     _crc_ibutton_update
+#define sbi(x, y)		x |= (uint8_t)(1 << y)		//!< Set bit
+#define cbi(x, y)		x &= (uint8_t) ~(1 << y)	//!< Clear bit
 
-#define SAVE_POWER()        __asm__ __volatile__ ("sleep")
+#define ATTR_NO_INIT   __attribute__ ((section(".noinit")))
 
 #ifndef WDTO_MAX
 #if defined(__AVR_ATtiny13__) || defined (__AVR_ATtiny13A__)
@@ -99,22 +129,21 @@
 #endif
 #endif
 
-#define TEMP_RESOLUTION_MAX                 (0x7)
-
 #define TEMP_RESOLUTION_MASK                (0x7)
 #define OVERSAMPLE_COUNT_EXPONENT_MASK      (0xF)
+
+#define CFG_FLAG_ALARM						(1<<7)
+#define CFG_FLAG_ERROR						(1<<6)
 
 // ----------------------------------------------------------------------------
 #pragma mark -
 #pragma mark owslave types
 
 typedef uint8_t bool;
-#define true(bool) (1)
-#define false(bool) (0)
+#define true (bool)(1)
+#define false (bool)(0)
 
-#define OWSLAVE_T_X     (20)
-#define OWSLAVE_T_PDH   (20)    // 15-60 uSec
-#define OWSLAVE_T_PDL   (80)    // 60-240 uSec
+#define OWSLAVE_T_X			(30)	//!< General one-wire delay period
 
 enum {
 	OWSLAVE_TYPE_CUSTOMFLAG = 0x80,
@@ -195,10 +224,10 @@ struct calib_t {
 	int8_t	temp_offset;
 
 	uint8_t reserved[4];
+
 } calib ATTR_NO_INIT;
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-//uint8_t was_interrupted ATTR_NO_INIT;
+#if SUPPORT_CONVERT_INDICATOR
 register uint8_t was_interrupted __asm__("r3");
 #endif
 
@@ -219,15 +248,17 @@ struct cfg_t cfg_eeprom EEMEM = {
 };
 
 struct calib_t calib_eeprom EEMEM = {
-	.range			= (0x69),
-	.offset			= (0x11),
-	.flags			= 0x6,
-	.temp_offset	= 0,
+	.range			= 0x69,
+	.offset			= 0x11,
+	.flags			= 0x06,
+	.temp_offset	= 0x00,
 };
 
 #if SUPPORT_DEVICE_NAMING
 char device_name[16] EEMEM = "";
 #endif
+
+bool convert_error_occured ATTR_NO_INIT;
 
 // ----------------------------------------------------------------------------
 #pragma mark -
@@ -257,7 +288,7 @@ median_uint16(
 #pragma mark -
 #pragma mark Other
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 static void
 owslave_begin_busy() {
 	sbi(TIMSK0, OCIE0A);
@@ -275,8 +306,7 @@ owslave_end_busy() {
 
 static uint8_t
 owslave_cb_alarm_condition() {
-	uint8_t moist_h = (value.moisture>>8);
-	return (moist_h > cfg.alarm_high) || (moist_h < cfg.alarm_low);
+	return (cfg.flags&(CFG_FLAG_ALARM|CFG_FLAG_ERROR))!=0;
 }
 
 // This is the general capacitance-reading function.
@@ -284,7 +314,7 @@ static uint16_t
 moist_calc() {
 	uint16_t v;
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 again:
 #endif
 
@@ -297,7 +327,7 @@ again:
 	// Wait long enough for the sensing capacitor to fully flush.
 	_delay_ms(2);
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 	was_interrupted = 0;
 #else
 	cli();
@@ -317,7 +347,7 @@ again:
 		cbi(DDRB, MOIST_DRIVE_PIN);
 #endif
 		cbi(PORTB, MOIST_DRIVE_PIN);
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 		if(was_interrupted)
 			goto again;
 		_NOP();
@@ -327,7 +357,7 @@ again:
 	}
 
 	// Turn interrupts back on.
-#if !OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if !SUPPORT_CONVERT_INDICATOR
 	sei();
 #endif
 
@@ -338,9 +368,9 @@ again:
 	return v;
 }
 
-#if SUPPORT_VOLTAGE_READING
+#if SUPPORT_VOLT_READING
 static void
-convert_voltage() {
+convert_volt() {
 #if defined(__AVR_ATtiny13__) || defined (__AVR_ATtiny13A__)
 	// Vref=Vcc, Input=PORTB2
 	ADMUX = _BV(MUX0);
@@ -362,9 +392,9 @@ convert_voltage() {
 
 	value.voltage = ADC;
 }
-#endif // SUPPORT_VOLTAGE_READING
+#endif // SUPPORT_VOLT_READING
 
-#if EMULATE_DS18B20
+#if SUPPORT_TEMP_READING
 static void
 convert_temp() {
 	int32_t temp = 0;
@@ -381,7 +411,13 @@ convert_temp() {
 		temp += ADC - 270;
 	}
 	temp >>= (cfg.flags&TEMP_RESOLUTION_MASK);
-	value.temp = (uint32_t)7250*(uint32_t)16/value.voltage - 337 + temp + calib.temp_offset*2;
+
+	value.temp = temp + calib.temp_offset*2;
+
+#if SUPPORT_VOLT_READING
+	// Adjust for changes in voltage.
+	value.temp += TEMP_VOLTAGE_COMP_NUMERATOR/value.voltage	- TEMP_VOLTAGE_COMP_OFFSET;
+#endif
 }
 #endif
 
@@ -389,8 +425,19 @@ static uint16_t
 read_moisture() {
 	uint16_t ret = 0;
 
-	for(int i = (1 << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK)); i; --i)
+	for(int i = (1 << (calib.flags&OVERSAMPLE_COUNT_EXPONENT_MASK)); i; --i) {
+		const uint16_t prev = ret;
 		ret += moist_calc();
+		if(ret<prev) {
+			ret = 0xFFFF;
+			goto bail;
+		}
+	}
+
+bail:
+
+	if(!ret || (ret==0xFFFF))
+		convert_error_occured = 1;
 
 	return ret;
 }
@@ -406,11 +453,11 @@ convert_moisture() {
 		uint16_t value_b;
 		uint16_t value_c;
 
-		_delay_ms(4);
+		_delay_ms(3);
 
 		value_b = read_moisture();
 
-		_delay_ms(4);
+		_delay_ms(3);
 
 		value_c = read_moisture();
 
@@ -437,6 +484,8 @@ convert_moisture() {
 			value_a = (1<<CALIBRATED_BITS)-1;
 
 		value_a <<= 16-CALIBRATED_BITS;
+
+		// TODO: Compensate for temperature.
 	}
 #endif
 
@@ -446,7 +495,12 @@ convert_moisture() {
 static void
 owslave_cb_convert() {
 	owslave_begin_busy();
-
+	
+	// Clear status flags
+	cfg.flags &= ~(CFG_FLAG_ALARM|CFG_FLAG_ERROR);
+	cfg.flags |= CFG_FLAG_ERROR;
+	convert_error_occured = false;
+	
 #if !DEVICE_IS_SPACE_CONSTRAINED
 	// Set all values to OxFFFF
 	uint8_t i = 7;
@@ -455,15 +509,25 @@ owslave_cb_convert() {
 	} while(i--);
 #endif
 
-#if SUPPORT_VOLTAGE_READING
-	convert_voltage();
+#if SUPPORT_VOLT_READING
+	convert_volt();
 #endif
 
-#if EMULATE_DS18B20
+#if SUPPORT_TEMP_READING
 	convert_temp();
 #endif
 
 	convert_moisture();
+
+	{	// Calculate alarm flag.
+		uint8_t moist_h = (value.moisture>>8);
+
+		if(	(moist_h > cfg.alarm_high) || (moist_h < cfg.alarm_low) )
+			cfg.flags |= CFG_FLAG_ALARM;
+	}
+
+	if(!convert_error_occured);
+		cfg.flags &= ~CFG_FLAG_ERROR;
 
 	owslave_end_busy();
 }
@@ -481,7 +545,7 @@ owslave_cb_recall() {
 
 static void
 owslave_cb_commit() {
-#if ENABLE_WATCHDOG
+#if USE_WATCHDOG
 	wdt_reset();
 #endif
 	eeprom_update_block(
@@ -506,7 +570,7 @@ owslave_read_bit() {
 	loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
 
 	// Wait until we should sample.
-	_delay_us(30);
+	_delay_us(OWSLAVE_T_X);
 
 	// Return the value of the bit.
 	return bit_is_set(PINB, OWSLAVE_IOPIN);
@@ -519,7 +583,7 @@ owslave_write_bit(uint8_t v) {
 		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
 
 	if(v == 0) {
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 		owslave_begin_busy();
 		loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
 		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
@@ -535,7 +599,7 @@ owslave_write_bit(uint8_t v) {
 		sbi(DDRB, OWSLAVE_IOPIN);
 
 		// Wait for the master to sample us.
-		_delay_us(30);
+		_delay_us(OWSLAVE_T_X);
 
 		// Return the bus back to idle.
 		cbi(DDRB, OWSLAVE_IOPIN);
@@ -607,11 +671,11 @@ main(void) {
 	TIMSK0 = 0;
 	sbi(TIMSK0, TOIE0);
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
-	OCR0A = (uint8_t)(30l * F_CPU / 8l / 1000000l);
+#if SUPPORT_CONVERT_INDICATOR
+	OCR0A = (uint8_t)((uint32_t)OWSLAVE_T_X * F_CPU / 8l / 1000000l);
 #endif
 
-#if SUPPORT_VOLTAGE_READING || EMULATE_DS18B20
+#if SUPPORT_VOLT_READING || EMULATE_DS18B20
 	ADCSRA = _BV(ADEN) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
 #endif
 
@@ -621,6 +685,11 @@ main(void) {
 	// Turn on the pin-change interrupt.
 	sbi(GIMSK, PCIE);
 
+#if USE_WATCHDOG
+	// Turn on the watchdog with a maximum watchdog timeout period.
+	wdt_enable(WDTO_MAX);
+#endif
+
 	// Enable interrupts.
 	sei();
 
@@ -628,11 +697,13 @@ main(void) {
 	if(MCUSR) {
 		// Hard reset. No presence pulse.
 
-		// Always disable the watchdog, even if we don't use it.
+		MCUSR = 0;
+
+#if !USE_WATCHDOG
 		wdt_disable();
+#endif
 
 		owslave_cb_recall();
-		MCUSR = 0;
 
 		goto wait_for_reset;
 	}
@@ -640,15 +711,10 @@ main(void) {
 	// Reset the MCU status register.
 	MCUSR = 0;
 
-#if ENABLE_WATCHDOG
-	// Turn on the watchdog with a maximum watchdog timeout period.
-	wdt_enable(WDTO_MAX);
-#endif
-
 	// Wait for reset pulse to end.
-	while(bit_is_clear(PINB, OWSLAVE_IOPIN)) SAVE_POWER();
+	while(bit_is_clear(PINB, OWSLAVE_IOPIN)) sleep_cpu();
 
-#if ENABLE_WATCHDOG
+#if USE_WATCHDOG
 	wdt_reset();
 #endif
 
@@ -696,7 +762,7 @@ main(void) {
 		}
 	}
 
-#if ENABLE_WATCHDOG
+#if USE_WATCHDOG
 	wdt_reset();
 #endif
 
@@ -776,7 +842,7 @@ main(void) {
 #endif
 
 wait_for_reset:
-	for(;; ) {
+	for(;;) {
 		// Allow the 1wire pin to generate interrupts.
 		sbi(PCMSK, OWSLAVE_IOPIN);
 
@@ -786,13 +852,13 @@ wait_for_reset:
 		// Enable interrupts.
 		sei();
 
-#if ENABLE_WATCHDOG
+#if USE_WATCHDOG
 		wdt_reset();
 #endif
 	}
 }
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 ISR(TIM0_COMPA_vect) {
 	cbi(DDRB, OWSLAVE_IOPIN);
 	was_interrupted++;
@@ -803,13 +869,13 @@ ISR(TIM0_COMPA_vect) {
 ISR(PCINT0_vect) {
 	TCCR0B = 0; // Stop the timer.
 
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 	was_interrupted++;
 #endif
 
 	// Is this a high-to-low transition?
 	if(bit_is_clear(PINB, OWSLAVE_IOPIN)) {
-#if OWSLAVE_SUPPORTS_CONVERT_INDICATOR
+#if SUPPORT_CONVERT_INDICATOR
 		if(bit_is_set(TIMSK0, OCIE0A))
 			sbi(DDRB, OWSLAVE_IOPIN);
 #endif
