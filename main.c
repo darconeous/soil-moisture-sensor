@@ -36,16 +36,32 @@
 // ----------------------------------------------------------------------------
 #pragma mark Build Settings
 
+// TEMPORARY DEVELOPMENT OVERRIDE OF PHYSICAL BUS PROTOCOL.
+// THIS MUST BE REMOVED BEFORE THE PROJECT IS OFFICIALLY RELEASED.
+#define COMM_PHY_PROTO			COMM_PHY_1WIRE
+
 #ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION			(0)
+#define FIRMWARE_VERSION		(0)
 #endif
 
 #ifndef CALIBRATED_BITS
-#define CALIBRATED_BITS				(10)
+#define CALIBRATED_BITS			(10)
 #endif
 
-#ifndef OWSLAVE_IOPIN
-#define OWSLAVE_IOPIN				(0)		//!< PB0
+#ifndef COMM_SDA
+#define COMM_SDA				(0)		//!< PB0, MOSI
+#endif
+
+#ifndef COMM_SCK
+#define COMM_SCK				(2)		//!< PB2
+#endif
+
+#define COMM_PHY_FxB			(1)		//!< Fox-Busâ„¢
+#define COMM_PHY_1WIRE			(2)		//!< 1-WireÂ® Compatible (DO NOT USE)
+#define COMM_PHY_2WIRE			(3)		//!< 2-Wire (SCK/SDA)
+
+#ifndef COMM_PHY_PROTO
+#define COMM_PHY_PROTO			COMM_PHY_FxB	//!< Default is Fox-Busâ„¢.
 #endif
 
 #ifndef MOIST_DRIVE_PIN
@@ -64,12 +80,12 @@
 #define SUPPORT_DEVICE_NAMING		(0)		//!< Not yet implemented.
 #endif
 
-#ifndef TEMP_VOLTAGE_COMP_NUMERATOR
-#define TEMP_VOLTAGE_COMP_NUMERATOR	((uint32_t)7250*16)
+#ifndef TEMP_VOLT_COMP_NUMERATOR
+#define TEMP_VOLT_COMP_NUMERATOR	((uint32_t)7250*16)
 #endif
 
-#ifndef TEMP_VOLTAGE_COMP_OFFSET
-#define TEMP_VOLTAGE_COMP_OFFSET	(337)
+#ifndef TEMP_VOLT_COMP_OFFSET
+#define TEMP_VOLT_COMP_OFFSET		(337)
 #endif
 
 #ifndef DEVICE_IS_SPACE_CONSTRAINED
@@ -135,52 +151,49 @@
 #define CFG_FLAG_ALARM						(1<<7)
 #define CFG_FLAG_ERROR						(1<<6)
 
-// ----------------------------------------------------------------------------
-#pragma mark -
-#pragma mark owslave types
-
 typedef uint8_t bool;
 #define true (bool)(1)
 #define false (bool)(0)
 
-#define OWSLAVE_T_X			(30)	//!< General one-wire delay period
+// ----------------------------------------------------------------------------
+#pragma mark -
+#pragma mark Misc.
 
+#if COMM_PHY_PROTO == COMM_PHY_1WIRE
+#define OWSLAVE_T_X					(30)	//!< General 1-WireÂ® delay period
+#endif
+
+#define COMM_FxB_READ_THRESHOLD		(10)
+
+//!	Device Type Codes
 enum {
-	OWSLAVE_TYPE_CUSTOMFLAG = 0x80,
-
-	OWSLAVE_TYPE_DS2401     = 0x01, // Serial-number only
-	OWSLAVE_TYPE_DS1920     = 0x10,
-	OWSLAVE_TYPE_DS18B20    = 0x28, // Temperature Sensor
-	OWSLAVE_TYPE_DS2450     = 0x20, // 4-channel ADC
-
-	OWSLAVE_TYPE_MOIST      = OWSLAVE_TYPE_DS2450|OWSLAVE_TYPE_CUSTOMFLAG
+	COMM_TYPE_CUSTOMFLAG = 0x80,
+	COMM_TYPE_MOIST      = 0x20|COMM_TYPE_CUSTOMFLAG
 };
 
+//!	ROM Commands
 enum {
-	OWSLAVE_ROMCMD_READ=0x33,           // 00110011b
-	OWSLAVE_ROMCMD_MATCH=0x55,          // 01010101b
-	OWSLAVE_ROMCMD_SKIP=0xCC,           // 11001100b
-	OWSLAVE_ROMCMD_SEARCH=0xF0,         // 11110000b
-	OWSLAVE_ROMCMD_ALARM_SEARCH=0xEC,   // 11101100b
+	COMM_ROMCMD_READ=0x33,           // 00110011b
+	COMM_ROMCMD_MATCH=0x55,          // 01010101b
+	COMM_ROMCMD_SKIP=0xCC,           // 11001100b
+	COMM_ROMCMD_SEARCH=0xF0,         // 11110000b
+	COMM_ROMCMD_ALARM_SEARCH=0xEC,   // 11101100b
+};
 
-	// DS2450, Quad ADC
-	OWSLAVE_FUNCCMD_RD_MEM=0xAA,
-	OWSLAVE_FUNCCMD_WR_MEM=0x55,
-	OWSLAVE_FUNCCMD_CONVERT=0x3C,
+//!	Function Commands
+enum {
+	COMM_FUNCCMD_RD_MEM=0xAA,
+	COMM_FUNCCMD_WR_MEM=0x55,
+	COMM_FUNCCMD_CONVERT=0x3C,
+	COMM_FUNCCMD_COMMIT_MEM=0x48,
+	COMM_FUNCCMD_RECALL_MEM=0xB8,
+	COMM_FUNCCMD_CONVERT_T=0x44,
+	COMM_FUNCCMD_RD_SCRATCH=0xBE,
 
-	OWSLAVE_FUNCCMD_COMMIT_MEM=0x48,
-	OWSLAVE_FUNCCMD_RECALL_MEM=0xB8,
-
-	// DS18B20, 1-Wire Thermometer
-	OWSLAVE_FUNCCMD_CONVERT_T=0x44,
-	OWSLAVE_FUNCCMD_WR_SCRATCH=0x4E,
-	OWSLAVE_FUNCCMD_RD_SCRATCH=0xBE,
-	OWSLAVE_FUNCCMD_CP_SCRATCH=0x48,
-	OWSLAVE_FUNCCMD_RECALL_E2=0xB8,
-
-	// Custom
-	OWSLAVE_FUNCCMD_RD_NAME=0xF1,
-	OWSLAVE_FUNCCMD_WR_NAME=0xFE,
+#if SUPPORT_DEVICE_NAMING
+	COMM_FUNCCMD_RD_NAME=0xF1,
+	COMM_FUNCCMD_WR_NAME=0xFE,
+#endif
 };
 
 typedef union {
@@ -190,7 +203,7 @@ typedef union {
 		uint8_t crc;
 	} s;
 	uint8_t d[8];
-} owslave_addr_t;
+} comm_addr_t;
 
 // ----------------------------------------------------------------------------
 #pragma mark -
@@ -212,7 +225,6 @@ struct cfg_t {
 	uint8_t	flags;
 	uint8_t	reserved[4];
 
-
 	uint8_t firmware_version;
 } cfg ATTR_NO_INIT;
 
@@ -231,12 +243,14 @@ struct calib_t {
 register uint8_t was_interrupted __asm__("r3");
 #endif
 
+bool convert_error_occured ATTR_NO_INIT;
+
 // ----------------------------------------------------------------------------
 #pragma mark -
 #pragma mark EEPROM Layout
 
-owslave_addr_t owslave_addr EEMEM = {
-	.s.type		= OWSLAVE_TYPE_MOIST,
+comm_addr_t comm_addr EEMEM = {
+	.s.type		= COMM_TYPE_MOIST,
 	.s.serial	= { 0x00, 0x00, 0x00, 0x00, 0x00, 0xff },
 	.s.crc		= 0x4D
 };
@@ -244,7 +258,7 @@ owslave_addr_t owslave_addr EEMEM = {
 struct cfg_t cfg_eeprom EEMEM = {
 	.alarm_low		= 0x00,
 	.alarm_high		= 0xFF,
-	.flags			= 0x00 | (7&TEMP_RESOLUTION_MASK),
+	.flags			= 0x00 | (4&TEMP_RESOLUTION_MASK),
 };
 
 struct calib_t calib_eeprom EEMEM = {
@@ -257,8 +271,6 @@ struct calib_t calib_eeprom EEMEM = {
 #if SUPPORT_DEVICE_NAMING
 char device_name[16] EEMEM = "";
 #endif
-
-bool convert_error_occured ATTR_NO_INIT;
 
 // ----------------------------------------------------------------------------
 #pragma mark -
@@ -290,22 +302,22 @@ median_uint16(
 
 #if SUPPORT_CONVERT_INDICATOR
 static void
-owslave_begin_busy() {
+comm_begin_busy() {
 	sbi(TIMSK0, OCIE0A);
 }
 
 static void
-owslave_end_busy() {
-	cbi(DDRB, OWSLAVE_IOPIN);
+comm_end_busy() {
+	cbi(DDRB, COMM_SDA);
 	cbi(TIMSK0, OCIE0A);
 }
 #else
-#define owslave_begin_busy()    do {} while(0)
-#define owslave_end_busy()  do {} while(0)
+#define comm_begin_busy()    do {} while(0)
+#define comm_end_busy()  do {} while(0)
 #endif
 
 static uint8_t
-owslave_cb_alarm_condition() {
+get_alarm_condition() {
 	return (cfg.flags&(CFG_FLAG_ALARM|CFG_FLAG_ERROR))!=0;
 }
 
@@ -341,15 +353,24 @@ again:
 	    bit_is_clear(PINB, MOIST_COLLECTOR_PIN);
 	    v++
 	) {
+		// Change the pin state to HIGH.
 		sbi(PORTB, MOIST_DRIVE_PIN);
-#if MOIST_FULLY_DRIVE_PULSES
+
+		// Change the output direction to output.
 		sbi(DDRB, MOIST_DRIVE_PIN);
+
+		// Change the output direction back to input (Hi-Z).
 		cbi(DDRB, MOIST_DRIVE_PIN);
-#endif
+
+		// Change the pin state back to LOW.
+		// If we don't do this, then the built-in pull-up will
+		// still be enabled and throw off our readings.
 		cbi(PORTB, MOIST_DRIVE_PIN);
+
 #if SUPPORT_CONVERT_INDICATOR
 		if(was_interrupted)
 			goto again;
+
 		_NOP();
 #else
 		_delay_us(1);
@@ -410,14 +431,17 @@ convert_temp() {
 		loop_until_bit_is_clear(ADCSRA, ADSC);
 		temp += ADC - 270;
 	}
+
 	temp >>= (cfg.flags&TEMP_RESOLUTION_MASK);
 
-	value.temp = temp + calib.temp_offset*2;
+	temp += calib.temp_offset*2;
 
 #if SUPPORT_VOLT_READING
 	// Adjust for changes in voltage.
-	value.temp += TEMP_VOLTAGE_COMP_NUMERATOR/value.voltage	- TEMP_VOLTAGE_COMP_OFFSET;
+	temp += TEMP_VOLT_COMP_NUMERATOR/value.voltage - TEMP_VOLT_COMP_OFFSET;
 #endif
+
+	value.temp = temp;
 }
 #endif
 
@@ -493,8 +517,8 @@ convert_moisture() {
 }
 
 static void
-owslave_cb_convert() {
-	owslave_begin_busy();
+do_convert() {
+	comm_begin_busy();
 	
 	// Clear status flags
 	cfg.flags &= ~(CFG_FLAG_ALARM|CFG_FLAG_ERROR);
@@ -504,9 +528,7 @@ owslave_cb_convert() {
 #if !DEVICE_IS_SPACE_CONSTRAINED
 	// Set all values to OxFFFF
 	uint8_t i = 7;
-	do {
-		((uint8_t*)&value)[i]=0xFF;
-	} while(i--);
+	do { ((uint8_t*)&value)[i]=0xFF; } while(i--);
 #endif
 
 #if SUPPORT_VOLT_READING
@@ -526,14 +548,14 @@ owslave_cb_convert() {
 			cfg.flags |= CFG_FLAG_ALARM;
 	}
 
-	if(!convert_error_occured);
+	if(!convert_error_occured)
 		cfg.flags &= ~CFG_FLAG_ERROR;
 
-	owslave_end_busy();
+	comm_end_busy();
 }
 
 static void
-owslave_cb_recall() {
+do_recall() {
 	eeprom_busy_wait();
 	eeprom_read_block(
 		&cfg,
@@ -544,7 +566,7 @@ owslave_cb_recall() {
 }
 
 static void
-owslave_cb_commit() {
+do_commit() {
 #if USE_WATCHDOG
 	wdt_reset();
 #endif
@@ -558,91 +580,191 @@ owslave_cb_commit() {
 
 // ----------------------------------------------------------------------------
 #pragma mark -
-#pragma mark OWSlave Functions
+#pragma mark Bus Communications Functions
 
 static uint8_t
-owslave_read_bit() {
+comm_read_bit() {
+#if COMM_PHY_PROTO == COMM_PHY_1WIRE
 	// Wait for the bus to go idle if it is already low.
-	if(bit_is_clear(PINB, OWSLAVE_IOPIN))
-		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
+	if(bit_is_clear(PINB, COMM_SDA))
+		loop_until_bit_is_set(PINB, COMM_SDA);
 
 	// Wait for the slot to open.
-	loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
+	loop_until_bit_is_clear(PINB, COMM_SDA);
 
 	// Wait until we should sample.
 	_delay_us(OWSLAVE_T_X);
 
 	// Return the value of the bit.
-	return bit_is_set(PINB, OWSLAVE_IOPIN);
+	return bit_is_set(PINB, COMM_SDA);
+#elif COMM_PHY_PROTO == COMM_PHY_FxB
+	uint8_t sum=0;
+	
+	// Wait for the bus to go idle if it is already low.
+	if(bit_is_clear(PINB, COMM_SDA))
+		loop_until_bit_is_set(PINB, COMM_SDA);
+
+	// Wait for the slot to open.
+	loop_until_bit_is_clear(PINB, COMM_SDA);
+
+	// Disable interrupts, so we can make sure we get the timing right.
+	cli();
+
+	while(1) {
+		if(bit_is_set(PINB, COMM_SDA)) {
+			_delay_us(2);
+			if(bit_is_set(PINB, COMM_SDA))
+				break;
+		}
+	}
+
+	_delay_us(3);
+
+	for(uint8_t i=0;i<255;i++) {
+		if(bit_is_clear(PINB,COMM_SDA)) {
+			if(sum++>COMM_FxB_READ_THRESHOLD) {
+				// Turn interrupts back on.
+				sei();
+				return true;
+			}
+		} else {
+			sum = 0;
+		}
+	}
+	
+	// Turn interrupts back on.
+	sei();
+	return 0;
+#else
+#error COMM_PHY_PROTO not set properly!
+#endif
 }
 
 static void
-owslave_write_bit(uint8_t v) {
+comm_write_bit(uint8_t v) {
+#if COMM_PHY_PROTO == COMM_PHY_1WIRE
 	// Wait for the bus to go idle.
-	if(bit_is_clear(PINB, OWSLAVE_IOPIN))
-		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
+	if(bit_is_clear(PINB, COMM_SDA))
+		loop_until_bit_is_set(PINB, COMM_SDA);
 
 	if(v == 0) {
 #if SUPPORT_CONVERT_INDICATOR
-		owslave_begin_busy();
-		loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
-		loop_until_bit_is_set(PINB, OWSLAVE_IOPIN);
-		owslave_end_busy();
+		comm_begin_busy();
+		loop_until_bit_is_clear(PINB, COMM_SDA);
+		loop_until_bit_is_set(PINB, COMM_SDA);
+		comm_end_busy();
 #else
 		// Disable interrupts, so we can make sure we get the timing right.
 		cli();
 
 		// Wait for the slot to open.
-		loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
+		loop_until_bit_is_clear(PINB, COMM_SDA);
 
 		// Assert our zero bit.
-		sbi(DDRB, OWSLAVE_IOPIN);
+		sbi(DDRB, COMM_SDA);
 
 		// Wait for the master to sample us.
 		_delay_us(OWSLAVE_T_X);
 
 		// Return the bus back to idle.
-		cbi(DDRB, OWSLAVE_IOPIN);
+		cbi(DDRB, COMM_SDA);
 
 		// Turn interrupts back on.
 		sei();
 #endif
 	} else {
 		// Wait for the slot to open.
-		loop_until_bit_is_clear(PINB, OWSLAVE_IOPIN);
+		loop_until_bit_is_clear(PINB, COMM_SDA);
 	}
+#elif COMM_PHY_PROTO == COMM_PHY_FxB
+	// Wait for the bus to go idle.
+	if(bit_is_clear(PINB, COMM_SDA))
+		loop_until_bit_is_set(PINB, COMM_SDA);
+	
+	if(v == 0) {
+		// Disable interrupts, so we can make sure we get the timing right.
+		cli();
+
+		// Wait for the slot to open.
+		loop_until_bit_is_clear(PINB, COMM_SDA);
+
+		loop_until_bit_is_set(PINB, COMM_SDA);
+
+		_delay_us(5);
+
+		// Assert our zero bit.
+		sbi(DDRB, COMM_SDA);
+
+		_delay_us(5);
+		
+		// Return the bus back to idle.
+		cbi(DDRB, COMM_SDA);
+
+		// Turn interrupts back on.
+		sei();
+	} else {
+		loop_until_bit_is_clear(PINB, COMM_SDA);
+		loop_until_bit_is_set(PINB, COMM_SDA);
+	}
+#else
+#error COMM_PHY_PROTO not set properly!
+#endif
+}
+
+static inline void
+comm_send_presence() {
+#if COMM_PHY_PROTO == COMM_PHY_1WIRE
+	// Wait for reset pulse to end.
+	while(bit_is_clear(PINB, COMM_SDA)) sleep_cpu();
+
+	// Let the bus idle for 20ÂµSec after the end of the reset pulse.
+	_delay_us(20);
+
+	// Send the 80ÂµSec presence pulse.
+	sbi(DDRB, COMM_SDA);
+	_delay_us(80);
+	cbi(DDRB, COMM_SDA);
+#elif COMM_PHY_PROTO == COMM_PHY_FxB
+	// Wait for reset pulse to end.
+	while(bit_is_clear(PINB, COMM_SDA)) sleep_cpu();
+
+	// Send a '0' bit for our presence.
+	comm_write_bit(0);
+#else
+#error COMM_PHY_PROTO not set properly!
+#endif
 }
 
 static uint8_t
-owslave_read_byte() {
+comm_read_byte() {
 	// We really DON'T need to initialize this. Honest.
 	uint8_t ret;
 
 	for(uint8_t i = 0; i != 8; i++) {
 		ret >>= 1;
-		if(owslave_read_bit())
+		if(comm_read_bit())
 			sbi(ret, 7);
 	}
 	return ret;
 }
 
 static void
-owslave_write_byte(uint8_t byte) {
+comm_write_byte(uint8_t byte) {
 	for(uint8_t i = 0; i != 8; i++) {
-		owslave_write_bit(byte & 1);
+		comm_write_bit(byte & 1);
 		byte >>= 1;
 	}
 }
 
 static inline uint16_t
-owslave_read_word() {
-	return owslave_read_byte() + (owslave_read_byte() << 8);
+comm_read_word() {
+	return comm_read_byte() + (comm_read_byte() << 8);
 }
 
 static inline void
-owslave_write_word(uint16_t x) {
-	owslave_write_byte(x);
-	owslave_write_byte(x >> 8);
+comm_write_word(uint16_t x) {
+	comm_write_byte(x);
+	comm_write_byte(x >> 8);
 }
 
 // These next three lines help clean out some,
@@ -660,30 +782,46 @@ main(void) {
 	// Stop the timer, if it happens to be running.
 	TCCR0B = 0;
 
-	// Initialize the IOPin
-	cbi(PORTB, OWSLAVE_IOPIN);
-	cbi(DDRB, OWSLAVE_IOPIN);
+	// Only set MOIST_COLLECTOR_PIN and MOIST_DRIVE_PIN to be outputs.
+	DDRB = _BV(MOIST_COLLECTOR_PIN) | _BV(MOIST_DRIVE_PIN);
+
+	// All pins other than COMM_SDA, MOIST_COLLECTOR_PIN,
+	// and MOIST_DRIVE_PIN are set to HIGH, which turns on
+	// the pull-up resistors.
+	PORTB = ~(
+		_BV(COMM_SDA) | _BV(MOIST_COLLECTOR_PIN) | _BV(MOIST_DRIVE_PIN)
+#if COMM_PHY_PROTO == COMM_PHY_2WIRE
+		| _BV(COMM_SCK)
+#endif
+	);
 
 	// Enable overflow interrupt, which is how we detect reset pulses.
 	// The interrupt handler for the overflow interrupt isn't actually
 	// defined, which means that __bad_interrupt gets called instead.
 	// This causes a soft-reset of the device by jumping to address 0x0000.
-	TIMSK0 = 0;
-	sbi(TIMSK0, TOIE0);
+	TIMSK0 = _BV(TOIE0);
 
-#if SUPPORT_CONVERT_INDICATOR
-	OCR0A = (uint8_t)((uint32_t)OWSLAVE_T_X * F_CPU / 8l / 1000000l);
+#if SUPPORT_CONVERT_INDICATOR && (COMM_PHY_PROTO==COMM_PHY_1WIRE)
+	OCR0A = (uint8_t)((uint32_t)OWSLAVE_T_X * F_CPU / (8l * 1000000l) );
 #endif
 
-#if SUPPORT_VOLT_READING || EMULATE_DS18B20
+#if SUPPORT_VOLT_READING || SUPPORT_TEMP_READING
 	ADCSRA = _BV(ADEN) | _BV(ADPS2) | _BV(ADPS1) | _BV(ADPS0);
 #endif
 
-	// Allow the 1wire pin to generate interrupts.
-	sbi(PCMSK, OWSLAVE_IOPIN);
+#if COMM_PHY_PROTO == COMM_PHY_2WIRE
+	USICR =
+		_BV(USIWM1) | _BV(USIWM0)	// 2-Wire Mode.
+		| _BV(USISIE)				// Start-Condition Interrupt Enable.
+		| _BV(USICS0) | _BV(USICS1) // External clock, negative edge.
+	;
+#else
+	// Allow the bus pin to generate interrupts.
+	sbi(PCMSK, COMM_SDA);
 
 	// Turn on the pin-change interrupt.
 	sbi(GIMSK, PCIE);
+#endif
 
 #if USE_WATCHDOG
 	// Turn on the watchdog with a maximum watchdog timeout period.
@@ -695,15 +833,22 @@ main(void) {
 
 	// Check to see if this was a hard or soft reset.
 	if(MCUSR) {
-		// Hard reset. No presence pulse.
+		// Hard reset. This happens at initial power-up,
+		// when a brown-out condition occurs, and when the
+		// watchdog timer expires.
+		// We don't send a presense-pulse in this case.
 
+		// Reset the MCU status register.
 		MCUSR = 0;
 
 #if !USE_WATCHDOG
+		// We should always attempt to disable the watchdog if we
+		// are not configured to use one. (Advice from the datasheet)
 		wdt_disable();
 #endif
 
-		owslave_cb_recall();
+		// Load our initial settings from EEPROM.
+		do_recall();
 
 		goto wait_for_reset;
 	}
@@ -711,51 +856,42 @@ main(void) {
 	// Reset the MCU status register.
 	MCUSR = 0;
 
-	// Wait for reset pulse to end.
-	while(bit_is_clear(PINB, OWSLAVE_IOPIN)) sleep_cpu();
+	comm_send_presence();
 
 #if USE_WATCHDOG
 	wdt_reset();
 #endif
 
-	// Let the bus idle for 20µSec after the end of the reset pulse.
-	_delay_us(20);
-
-	// Send the 80µSec presence pulse.
-	sbi(DDRB, OWSLAVE_IOPIN);
-	_delay_us(80);
-	cbi(DDRB, OWSLAVE_IOPIN);
-
 	// Read ROM command
-	cmd = owslave_read_byte();
+	cmd = comm_read_byte();
 	flags = 0;
 
 	// Interpret what the ROM command means.
-	if(cmd == OWSLAVE_ROMCMD_MATCH)
+	if(cmd == COMM_ROMCMD_MATCH)
 		flags = _BV(2);
-	else if(cmd == OWSLAVE_ROMCMD_READ)
+	else if(cmd == COMM_ROMCMD_READ)
 		flags = _BV(0);
-	else if((cmd == OWSLAVE_ROMCMD_SEARCH)
-	    || ((cmd == OWSLAVE_ROMCMD_ALARM_SEARCH)
-	        && owslave_cb_alarm_condition()
+	else if((cmd == COMM_ROMCMD_SEARCH)
+	    || ((cmd == COMM_ROMCMD_ALARM_SEARCH)
+	        && get_alarm_condition()
 	    )
 	)
 		flags = _BV(0) | _BV(1) | _BV(2);
-	else if(cmd != OWSLAVE_ROMCMD_SKIP)
+	else if(cmd != COMM_ROMCMD_SKIP)
 		goto wait_for_reset;
 
 	// Perfom the ROM command.
 	if(flags) {
 		for(uint8_t i = 0; i != 8; i++) {
-			uint8_t byte = eeprom_read_byte(&owslave_addr.d[i]);
+			uint8_t byte = eeprom_read_byte(&comm_addr.d[i]);
 			uint8_t j = 8;
 			do {
 				if(flags & _BV(0))
-					owslave_write_bit(byte & 1);
+					comm_write_bit(byte & 1);
 				if(flags & _BV(1))
-					owslave_write_bit((~byte) & 1);
+					comm_write_bit((~byte) & 1);
 				if(flags & _BV(2))
-					if((byte & 1) ^ owslave_read_bit())
+					if((byte & 1) ^ comm_read_bit())
 						goto wait_for_reset;
 				byte >>= 1;
 			} while(--j);
@@ -767,38 +903,38 @@ main(void) {
 #endif
 
 	// Read function command
-	cmd = owslave_read_byte();
+	cmd = comm_read_byte();
 
 #if SUPPORT_DEVICE_NAMING
-	if(cmd == OWSLAVE_FUNCCMD_RD_NAME) {
+	if(cmd == COMM_FUNCCMD_RD_NAME) {
 		for(uint8_t i = 0; i != (uint8_t)sizeof(device_name); i++) {
-			owslave_write_byte(eeprom_read_byte(&device_name[i]));
+			comm_write_byte(eeprom_read_byte(&device_name[i]));
 		}
-		owslave_write_byte(0x00);
+		comm_write_byte(0x00);
 	} else
 #endif
-	if((cmd == OWSLAVE_FUNCCMD_RD_MEM)
-	    || (cmd == OWSLAVE_FUNCCMD_WR_MEM)
+	if((cmd == COMM_FUNCCMD_RD_MEM)
+	    || (cmd == COMM_FUNCCMD_WR_MEM)
 	) {
 		// Initialize the CRC by shifting in the command.
 		uint16_t crc = _crc16_update(0, cmd);
 
 		// Read in the requested byte address and update the CRC.
-		uint8_t i = owslave_read_byte();
+		uint8_t i = comm_read_byte();
 		crc = _crc16_update(crc, i);
-		owslave_read_byte();
+		comm_read_byte();
 		crc = _crc16_update(crc, 0);
 
 		while(i < 23) {
 			uint8_t byte;
 
-			if(cmd == OWSLAVE_FUNCCMD_RD_MEM) {
+			if(cmd == COMM_FUNCCMD_RD_MEM) {
 				// Send the byte to the OW master.
 				byte = ((uint8_t*)&value)[i++];
-				owslave_write_byte(byte);
+				comm_write_byte(byte);
 			} else {
 				// receive the byte from the OW master.
-				byte = owslave_read_byte();
+				byte = comm_read_byte();
 			    ((uint8_t*)&value)[i++] = byte;
 			}
 
@@ -807,44 +943,44 @@ main(void) {
 
 			// Write out the CRC at every 8-byte page boundry.
 			if((i & 7) == 0) {
-				owslave_write_word(crc);
+				comm_write_word(crc);
 				crc = 0;
 			}
 		}
-	} else if(cmd == OWSLAVE_FUNCCMD_CONVERT) {
-		owslave_read_byte();    // Ignore input select mask
-		owslave_read_byte();    // Ignore read-out control
-		owslave_cb_convert();
-	} else if(cmd == OWSLAVE_FUNCCMD_COMMIT_MEM) {
-		owslave_begin_busy();
-		owslave_cb_commit();
-		owslave_end_busy();
-	} else if(cmd == OWSLAVE_FUNCCMD_RECALL_MEM) {
-		owslave_begin_busy();
-		owslave_cb_recall();
-		owslave_end_busy();
-	} else if(cmd == OWSLAVE_FUNCCMD_CONVERT_T) {
-		owslave_cb_convert();
+	} else if(cmd == COMM_FUNCCMD_CONVERT) {
+		comm_read_byte();    // Ignore input select mask
+		comm_read_byte();    // Ignore read-out control
+		do_convert();
+	} else if(cmd == COMM_FUNCCMD_COMMIT_MEM) {
+		comm_begin_busy();
+		do_commit();
+		comm_end_busy();
+	} else if(cmd == COMM_FUNCCMD_RECALL_MEM) {
+		comm_begin_busy();
+		do_recall();
+		comm_end_busy();
+	} else if(cmd == COMM_FUNCCMD_CONVERT_T) {
+		do_convert();
 	}
 #if EMULATE_DS18B20
-	else if(cmd == OWSLAVE_FUNCCMD_RD_SCRATCH) {
+	else if(cmd == COMM_FUNCCMD_RD_SCRATCH) {
 		uint8_t crc = 0;
 		crc = _crc_ibutton_update(crc, ((uint8_t*)&value.temp)[0]);
-		owslave_write_byte(((uint8_t*)&value.temp)[0]);
+		comm_write_byte(((uint8_t*)&value.temp)[0]);
 		crc = _crc_ibutton_update(crc, ((uint8_t*)&value.temp)[1]);
-		owslave_write_byte(((uint8_t*)&value.temp)[1]);
+		comm_write_byte(((uint8_t*)&value.temp)[1]);
 		for(uint8_t i = 0; i < 6; i++) {
 			crc = _crc_ibutton_update(crc, 0);
-			owslave_write_byte(0);
+			comm_write_byte(0);
 		}
-		owslave_write_byte(crc);
+		comm_write_byte(crc);
 	}
 #endif
 
 wait_for_reset:
 	for(;;) {
-		// Allow the 1wire pin to generate interrupts.
-		sbi(PCMSK, OWSLAVE_IOPIN);
+		// Allow the bus pin to generate interrupts.
+		sbi(PCMSK, COMM_SDA);
 
 		// Turn on the pin-change interrupt.
 		sbi(GIMSK, PCIE);
@@ -858,10 +994,16 @@ wait_for_reset:
 	}
 }
 
+#if (COMM_PHY_PROTO == COMM_PHY_1WIRE) || (COMM_PHY_PROTO == COMM_PHY_FxB)
+
 #if SUPPORT_CONVERT_INDICATOR
 ISR(TIM0_COMPA_vect) {
-	cbi(DDRB, OWSLAVE_IOPIN);
+#if COMM_PHY_PROTO == COMM_PHY_1WIRE
+	cbi(DDRB, COMM_SDA);
 	was_interrupted++;
+#elif COMM_PHY_PROTO == COMM_PHY_FxB
+	// TODO: Writeme!
+#endif
 }
 #endif
 
@@ -874,18 +1016,24 @@ ISR(PCINT0_vect) {
 #endif
 
 	// Is this a high-to-low transition?
-	if(bit_is_clear(PINB, OWSLAVE_IOPIN)) {
+	if(bit_is_clear(PINB, COMM_SDA)) {
 #if SUPPORT_CONVERT_INDICATOR
+#if COMM_PHY_PROTO == COMM_PHY_1WIRE
 		if(bit_is_set(TIMSK0, OCIE0A))
-			sbi(DDRB, OWSLAVE_IOPIN);
+			sbi(DDRB, COMM_SDA);
+#elif COMM_PHY_PROTO == COMM_PHY_FxB
+	// TODO: Writeme!
+#endif
 #endif
 
 		TCNT0 = 0; // Reset counter.
 
 		// Start timer with prescaler of 1/8.
-		// @9.6MHz: ~.8333µSecconds per tick, 214µSecond reset pulse
-		// @8.0MHz: ~1µSecond per tick, 256µSecond reset pulse
+		// @9.6MHz: ~.8333ÂµSecconds per tick, 214ÂµSecond reset pulse
+		// @8.0MHz: ~1ÂµSecond per tick, 256ÂµSecond reset pulse
 		TCCR0B = (1 << 1);
 	}
 }
+
+#endif
 

@@ -4,17 +4,39 @@ NOTE: THIS IS ALL CURRENTLY IN FLUX. THIS DOCUMENTATION MAY NOT REFLECT THE
 ACTUAL PROTOCOL IMPLEMENTED IN THE SOURCE CODE. THIS WILL BE FIXED BEFORE THE
 OFFICIAL RELEASE.
 
-This sensor uses the 1-wire slave protocol. This protocol is widely documented.
-See the 1-Wire/iButton Standard (referenced at the end of this document) for
-more information.
+# Physical-layer Bus Protocol #
 
-## Patent Notice ##
+The firmware on this sensor can be compiled to use any number of physical
+protocols for communication. These protocols define how individual bits are
+sent and received from the bus. These include:
 
-The 1-wire protocol is patented: USPAT#6,108,751
+ * 1-Wire® Compatible: DO NOT USE. SEE PATENT NOTICE BELOW.
+ * Fox-Bus™: Similar to 1-Wire®, but not patented and with better
+   noise resistance. <http://fox-bus.org/>
+ * 2-Wire: Uses two wires, SCL(clock) and SDA(data).
 
-You will need to obtain a license for the 1-wire protocol if you plan to
-construct any significant number of these devices, otherwise MAXIM will come
-knocking at your door with angry lawyers.
+The recommended and default physical bus protocol is Fox-Bus™.
+
+## IMPORTANT PATENT NOTICE ##
+
+THE PHYSICAL LAYER OF THE 1-WIRE® PROTOCOL IS PATENTED: USPAT#6,108,751
+
+MAXIM-IC, THE OWNER OF THIS PATENT, HAS EXPLICITLY STATED THAT THEY ARE
+UNABLE/UNWILLING TO GRANT ANY LICENSE FOR THE USE OF THE 1-WIRE PROTOCOL
+ON NON-MAXIM SLAVE DEVICES. AS SUCH, IF YOU CHOOSE TO USE OF THE 1-WIRE
+PHYSICAL PROTOCOL FOR THIS PROJECT, IT COULD EXPOSE YOU TO SUBSTANTIAL AND
+DEVISTATING CIVIL LIABILITY---EVEN FOR PERSONAL USE.
+
+USE FOX-BUS™ INSTEAD. YOU HAVE BEEN WARNED.
+
+# Link-layer Bus Protocol #
+
+The link-layer of the 1-Wire® protocol appears to *NOT* be patented. As such,
+the link-layer bus protocol used for this project is similar to that of
+1-Wire®. See any documentation of the 1-Wire® protocol for more details.
+
+Alternative link-layer bus protocols (Like I²C) may be implemented in the future
+if the need arrises.
 
 ## ROM Commands ##
 
@@ -26,7 +48,7 @@ This device supports the following ROM funcitons:
  * `0xF0` SEARCH
  * `0xEC` ALARMSEARCH
 
-Overdrive commands are not (yet?) supported.
+Overdrive commands are not supported.
 
 ## Function Commands ##
 
@@ -42,8 +64,8 @@ This device supports the following funciton commands:
 
 ### READMEM and WRITEMEM ###
 
-READMEM and WRITEMEM work similar to how they work on other 1-wire or
-iButton devices: each takes a two-byte start address and then either
+READMEM and WRITEMEM work similar to how they work on other 1-Wire® or
+iButton® devices: each takes a two-byte start address and then either
 reads out or reads in bytes to be read or written respectively. At each
 eight-byte page boundary, a 16-bit CRC is returned from the device.
 
@@ -130,7 +152,7 @@ following formula:
 
     VCC = 1024.0*1.1/(VOLTAGE_L+(VOLTAGE_H<<8))
 
-### Page 1 - Device Configuration ###
+### Page 1 - Device Configuration and Status ###
 
  * `0x08` ALARM_LOW
  * `0x09` ALARM_HIGH
@@ -156,8 +178,9 @@ See notes.txt for more information on calibration values.
 
 ## References ##
 
- * [1-Wire Wikipedia Page](http://en.wikipedia.org/wiki/1-Wire)
- * [1-Wire/iButton Standard](http://www.maxim-ic.com/products/ibutton/ibuttons/standard.pdf)
+ * [1-Wire® Wikipedia Page](http://en.wikipedia.org/wiki/1-Wire)
+ * [1-Wire®/iButton® Standard](http://www.maxim-ic.com/products/ibutton/ibuttons/standard.pdf)
  * [DS18B20 Datasheet](http://datasheets.maxim-ic.com/en/ds/DS18B20.pdf)
  * [DS2450 Datasheet](http://datasheets.maxim-ic.com/en/ds/DS2450.pdf)
  * [USPAT#6,108,751](http://patimg1.uspto.gov/.piw?Docid=06108751&idkey=NONE)
+ * [Fox-Bus™](http://fox-bus.org/)
