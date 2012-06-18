@@ -26,13 +26,18 @@ Cost@25x:   USD$0.09    (PN CC0805KKX7R7BB105)
 Cost@Mass:  USD$0.016   (PN CC0805KKX7R7BB105)
 Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=CC0805KKX7R7BB105
 
-Desc:       0805 or 0603 470kΩ Resistor
-PartNames:	R1, R2
-Count:      2
-Cost@1x:    USD$0.02    (PN ERJ-3GEYJ474V)
-Cost@25x:   USD$0.02    (PN ERJ-3GEYJ474V)
-Cost@Mass:  USD$0.00131 (PN RC0603JR-07470KL)
-Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=RC0603JR-07470KL
+Desc:		Transformer
+PartNames:	L1
+Count:		1
+Source:		http://www.digikey.com/product-search/en?x=0&y=0&lang=en&site=us&KeyWords=SRF0703-330MCT-ND
+
+//Desc:       0805 or 0603 470kΩ Resistor
+//PartNames:	R1, R2
+//Count:      2
+//Cost@1x:    USD$0.02    (PN ERJ-3GEYJ474V)
+//Cost@25x:   USD$0.02    (PN ERJ-3GEYJ474V)
+//Cost@Mass:  USD$0.00131 (PN RC0603JR-07470KL)
+//Source:     http://search.digikey.com/scripts/DkSearch/dksus.dll?keywords=RC0603JR-07470KL
 
 Desc:       0.1" 6-Position Polarized Shrouded Header
 PartNames:	J1
