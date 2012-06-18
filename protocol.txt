@@ -19,19 +19,46 @@ The recommended and default physical bus protocol is Fox-Bus™.
 
 ## IMPORTANT PATENT NOTICE ##
 
-THE PHYSICAL LAYER OF THE 1-WIRE® PROTOCOL IS PATENTED: USPAT#6,108,751
+THE PHYSICAL LAYER OF THE 1-WIRE® PROTOCOL IS PATENTED:
+
+	* USPAT#6,108,751
+	* USPAT#5,974,504
+	* USPAT#5,864,872
+	* USPAT#5,587,955
+	* USPAT#5,517,015
 
 MAXIM-IC, THE OWNER OF THIS PATENT, HAS EXPLICITLY STATED THAT THEY ARE
 UNABLE/UNWILLING TO GRANT ANY LICENSE FOR THE USE OF THE 1-WIRE PROTOCOL
-ON NON-MAXIM SLAVE DEVICES. AS SUCH, IF YOU CHOOSE TO USE OF THE 1-WIRE
-PHYSICAL PROTOCOL FOR THIS PROJECT, IT COULD EXPOSE YOU TO SUBSTANTIAL AND
-DEVISTATING CIVIL LIABILITY---EVEN FOR PERSONAL USE.
+ON NON-MAXIM SLAVE DEVICES. AS SUCH, IF YOU CHOOSE TO USE THE 1-WIRE PHYSICAL
+PROTOCOL FOR THIS PROJECT, IT COULD EXPOSE YOU TO SUBSTANTIAL AND DEVISTATING
+CIVIL LIABILITY---EVEN FOR PERSONAL USE.
 
 USE FOX-BUS™ INSTEAD. YOU HAVE BEEN WARNED.
 
+(THE 1-WIRE PROTOCOL WILL BE UNENCOMBERED BY PATENTS IN THE UNITED STATES NO
+SOONER THAN 2013-05-14)
+
+### 1-Wire Link-layer ###
+
+The earliest published reference to the link-layer of the 1-Wire protocol
+that I have found so far is in USPAT#5,517,015. In that patent, the link-layer
+protocol is not mentioned in the claims, even though it is described in the
+body of the patent. If it isn't claimed, it isn't covered. USPAT#5,809,518 comes
+close, but its claims are very narrow in scope. Even if those claims could be
+made to apply to this application, the patent was filed over one year after the
+filing date for USPAT#5,517,015---which originally published (but did not claim)
+the link-layer bus protocol for 1-Wire. From what I understand, under US patent
+law, an entity has one year after an invention is first published to file for a
+patent. That has clearly not happened in the case for the 1-Wire link-level
+protocol.
+
+Baring any discovery which would indicate otherwise I am assuming that the
+link-layer of the 1-Wire protocol is, for this application, not patent
+encumbered.
+
 # Link-layer Bus Protocol #
 
-The link-layer of the 1-Wire® protocol appears to *NOT* be patented. As such,
+Since link-layer of the 1-Wire® protocol appears to not be patented,
 the link-layer bus protocol used for this project is similar to that of
 1-Wire®. See any documentation of the 1-Wire® protocol for more details.
 

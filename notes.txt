@@ -98,5 +98,17 @@ to make sure that they don't let water seep in and start conducting. This has
 turned out to be a major pain. The design has already been updated to not
 have so many vias, but that doesn't fix the 40+ boards I already have.
 
+----
 
+FUSE SETTINGS:
+
+With Debug Wire:
+	EXTENDED: 0xFF
+	HIGH: 0x95
+	LOW: 0xE2
+
+W/Out Debug Wire:
+	EXTENDED: 0xFF
+	HIGH: 0xD5
+	LOW: 0xE2
 

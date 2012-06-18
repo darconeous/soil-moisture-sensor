@@ -1,10 +1,20 @@
 [Eagle]
 Version="05 08 00"
 Platform="Mac OS X"
+Serial="62191E841E-LSR-WLM-1EL"
 Globals="Globals"
 Desktop="Desktop"
 
 [Globals]
 AutoSaveProject=1
+UsedLibrary="/Users/darco/Projects/eagle-lbr/SparkFun.lbr"
+
+[Win_1]
+Type="Control Panel"
+Loc="134 79 1267 540"
+State=2
+Number=0
 
 [Desktop]
+Screen="1440 900"
+Window="Win_1"
